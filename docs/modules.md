@@ -2,7 +2,7 @@
 
 > Bản đồ code cho developer/session sau. Cập nhật **cùng commit** khi thêm file mới hoặc tách file (xem `CLAUDE.md` mục 1-3, mục Documentation Requirements).
 
-Cập nhật lần cuối: 2026-08-02.
+Cập nhật lần cuối: 2026-08-02 (thêm panel Web UI cho Ethernet static IP fallback).
 
 ---
 
@@ -48,7 +48,7 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 - `publishedState` — trạng thái FULL/MISSING **đã thực sự publish** (MQTT/OSC) lần gần nhất, tách riêng khỏi `lastState` (chỉ track input debounce thô). Thêm sau finding 4.1: dùng `lastState` làm proxy cho "đã publish gì" khiến nhiễu quanh ngưỡng có thể re-fire cùng 1 cue FULL/MISSING dù chưa có thay đổi occupancy thật. `checkDistance()` giờ gate việc gọi `triggerFull()`/`triggerMissing()` bằng `currentState != publishedState` **cộng thêm** debounce `actionDone`/`confirmTime` cũ, không thay thế nó.
 - `eth_connected` — cờ Ethernet đã có IP hay chưa (set qua `WiFiEvent()` khi DHCP thành công, HOẶC set thẳng trong `setup()` khi rơi vào static-IP fallback — xem `ethStaticIp` bên dưới, `ETH.config()` không tự bắn `ARDUINO_EVENT_ETH_GOT_IP`).
 - `authUser[32]`, `authPass[32]` — username/password cho HTTP Basic Auth trên `/save`, `/test_mqtt`, `/test_osc` (F6). Mặc định `"admin"`/`"admin"`, log rõ ra Serial mỗi lần boot nếu vẫn còn giá trị mặc định. Load/save qua NVS key `auth_user`/`auth_pass`, sửa qua panel **Admin Auth** trên Web UI (`html.cpp`).
-- `ethStaticIp[16]`, `ethStaticGateway[16]`, `ethStaticNetmask[16]` — địa chỉ IP tĩnh dùng khi DHCP không thành công sau `ETH_WAIT_MS` (F19). Mặc định `192.168.99.199` / gateway `192.168.99.1` / netmask `255.255.255.0`. NVS key `eth_ip`/`eth_gw`/`eth_mask`, có load/save đầy đủ nhưng **chưa có panel Web UI** để sửa (chỉ sửa được qua NVS trực tiếp hoặc build lại default trong `cantim_mqtt_new.cpp`).
+- `ethStaticIp[16]`, `ethStaticGateway[16]`, `ethStaticNetmask[16]` — địa chỉ IP tĩnh dùng khi DHCP không thành công sau `ETH_WAIT_MS` (F19). Mặc định `192.168.99.199` / gateway `192.168.99.1` / netmask `255.255.255.0`. NVS key `eth_ip`/`eth_gw`/`eth_mask`, load/save đầy đủ, sửa được qua panel **Mạng (Ethernet)** trên Web UI (`html.cpp`) — xem field `eth_ip`/`eth_gw`/`eth_mask` trong `web.cpp::handleSave()`.
 
 **Hàm:** `int saveDistanceConfig()` — định nghĩa trong `cantim_mqtt_new.cpp`, ghi toàn bộ config trên vào Preferences (namespace `"distance"`). Trả về số lượng `put*()` thất bại (0 = OK hết), hoặc `-1` nếu `prefs.begin()` thất bại (chưa ghi được gì) — đổi từ `void` sau F2 để `handleSave()` trong `web.cpp` biết thật sự đã lưu hay chưa.
 
@@ -102,7 +102,7 @@ MQTT client (ESP-IDF `esp_mqtt_client`, không phải PubSubClient) + gửi gói
 
 ---
 
-## `src/web.h` + `src/web.cpp` (6 + 201 dòng)
+## `src/web.h` + `src/web.cpp` (6 + 387 dòng)
 
 HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, `mqttInit()`, `triggerFull()`), **không** tự chứa business logic tính toán.
 
@@ -115,6 +115,7 @@ HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, 
   - `osc_address_full`/`osc_address_missing` — phải bắt đầu bằng `/` nếu không rỗng (4.9, chuẩn OSC 1.0).
   - `confirm` (ms) — **clamp** (không reject) vào khoảng `[50, 60000]` trước khi gán vào `confirmTime` (kiểu `unsigned long`) (F15 — trước đây `"-1"` qua `String::toInt()` gán thẳng vào biến unsigned sẽ wrap thành `4294967295`, âm thầm vô hiệu hoá toàn bộ trigger FULL/MISSING).
   - `auth_user`/`auth_pass` — field mới (F6), chỉ ghi đè khi non-empty (đổi user không bắt buộc phải gõ lại pass và ngược lại).
+  - `eth_ip`/`eth_gw`/`eth_mask` — panel **Mạng (Ethernet)** trên Web UI, ghi vào `ethStaticIp`/`ethStaticGateway`/`ethStaticNetmask` (F19 static-IP fallback). Validate bằng `IPAddress::fromString()`, reject (không lưu) nếu không parse được thành IPv4 hợp lệ — cùng pattern "validate trước khi copy" với các field text khác.
   Nếu MQTT server/port/user/pass đổi → restart MQTT client (`esp_mqtt_client_stop/destroy` rồi `mqttInit()` lại), và set `mqttConnected = false` ngay sau destroy (4.8 — destroy không tự bắn `MQTT_EVENT_DISCONNECTED` nên UI sẽ kẹt ở "CONNECTED" nếu không set tay). Phản hồi JS `alert(...)` dựa trên số lỗi `saveDistanceConfig()` trả về (F2) — "Saved OK" chỉ khi thật sự 0 lỗi, ngược lại báo số lỗi hoặc "Save FAILED", cộng thêm ghi chú field nào bị reject nếu có (OSC address / MQTT port / OSC port / sensor min-max).
 - `syncStateMachineAfterTestTrigger()` (static) — 4.6: set `lastState = publishedState = actionDone = true` + reset `stateTimer`, gọi sau khi Test button fire `triggerFull()`. Trước fix, bấm Test trong lúc máy đang ở MISSING khiến `checkDistance()` vẫn nghĩ "đã publish MISSING" (không hề biết vừa test-publish FULL) và giữ `actionDone=true` cho state cũ — receiver kẹt ở FULL cho tới lần chuyển trạng thái thật kế tiếp.
 - `handleTestMQTT()` / `handleTestOSC()` — POST, cũng yêu cầu `requireAuth()` (F6). Gọi `triggerFull()` để test thủ công rồi `syncStateMachineAfterTestTrigger()` (cả 2 handler vẫn cùng gọi `triggerFull()`, chưa có nhánh test riêng MISSING — xem ghi chú audit bên dưới, KHÔNG đổi trong cluster này).
@@ -123,7 +124,7 @@ HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, 
 
 ---
 
-## `src/html.h` + `src/html.cpp` (3 + 208 dòng)
+## `src/html.h` + `src/html.cpp` (3 + 287 dòng)
 
 Frontend thuần render — không có quyết định nghiệp vụ, chỉ đọc biến config/state đã có sẵn để build chuỗi HTML.
 
@@ -134,6 +135,7 @@ Frontend thuần render — không có quyết định nghiệp vụ, chỉ đ�
   - Panel **OSC Settings** — enable, IP, port, FULL/MISSING address + value.
   - Panel **Confirm Settings** — thời gian debounce (ms).
   - Panel **Admin Auth** (mới, F6) — username hiển thị giá trị hiện tại (qua `htmlEscape()`), password luôn render rỗng (`value=''`) để không lộ pass hiện tại qua View Source; để trống 1 trong 2 field khi Save nghĩa là giữ nguyên giá trị cũ (xem `web.cpp::handleSave`).
+  - **Tab "Mạng (Ethernet)"** — panel riêng (`#tab-network`, JS `showTab()` chuyển đổi 2 div `.tab-content` bằng class `active`, không reload trang) chứa `eth_ip`/`eth_gw`/`eth_mask` (F19 static-IP fallback). Cùng 1 `<form action='/save'>` với tab "Cấu hình" — nút SAVE SETTINGS lưu cả 2 tab 1 lần, bất kể tab nào đang active.
   - Nút **SAVE SETTINGS** (POST `/save`), **Test MQTT** / **Test OSC** (POST `/test_mqtt` / `/test_osc`) — cả 3 route này giờ yêu cầu HTTP Basic Auth (F6, xem `web.cpp::requireAuth`), trình duyệt sẽ tự hỏi lại nếu chưa đăng nhập trong session.
   - Div `#d` (trạng thái realtime) được JS `fetch('/data')` cập nhật mỗi 100ms — route `/data` KHÔNG yêu cầu auth (chỉ đọc).
 
@@ -165,4 +167,4 @@ Ngoài ra, so với danh sách bug ở spec doc §8 (chưa cập nhật trạng 
 - **Bug 3** (audit toàn bộ Preferences: key name, buffer, strcpy...) — key name đã fix (Bug 1/F1/F29). Validate **giá trị** (numeric range cho `mqtt_port`/`osc_port`/`confirm`, `min<=max` cho sensor, `/` prefix cho OSC address) đã thêm ở `web.cpp::handleSave()` (F16/F15/4.9). Vẫn còn phần dùng `strncpy` cho các field text (`mqtt_ip`, `mqtt_topic`, `osc_ip`, `osc_address_*`, ...) mà **chưa validate độ dài trước khi copy** (mục 6 CLAUDE.md: "Dữ liệu từ Web form → validate độ dài **trước khi** copy vào buffer") — `strncpy` tự cắt bớt nên không tràn buffer, nhưng không cảnh báo user khi giá trị bị cắt. Chưa fix, out of scope cho các cluster đã làm.
 - **HTML escaping** (spec doc §9 Web Server) — F7 đã fix: `htmlEscape()` trong `html.cpp` áp dụng cho toàn bộ giá trị config user nhập được render lại vào `value='...'`.
 - **Auth trên endpoint thay đổi state** (không có trong spec doc gốc, phát hiện lúc audit — F6) — đã fix: `/save`, `/test_mqtt`, `/test_osc` giờ yêu cầu HTTP Basic Auth (`authUser`/`authPass`, mặc định `admin`/`admin`, đổi được qua panel Admin Auth).
-- **Ethernet không có IP vĩnh viễn nếu không có DHCP server** (F19, biến thể mới của Bug 2 — Bug 2 gốc là block vô hạn, đã fix; nhưng "chờ có timeout rồi bỏ cuộc" cũng để thiết bị không có IP mãi mãi nếu mạng không có DHCP) — đã fix bằng static-IP fallback (`192.168.99.199`), xem `cantim_mqtt_new.cpp::setup()` ở trên.
+- **Ethernet không có IP vĩnh viễn nếu không có DHCP server** (F19, biến thể mới của Bug 2 — Bug 2 gốc là block vô hạn, đã fix; nhưng "chờ có timeout rồi bỏ cuộc" cũng để thiết bị không có IP mãi mãi nếu mạng không có DHCP) — đã fix bằng static-IP fallback (`192.168.99.199`), xem `cantim_mqtt_new.cpp::setup()` ở trên. IP/gateway/netmask fallback này giờ sửa được qua panel Web UI (tab "Mạng (Ethernet)", `html.cpp`/`web.cpp`) thay vì chỉ qua NVS trực tiếp.

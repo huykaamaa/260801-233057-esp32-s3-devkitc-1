@@ -246,6 +246,43 @@ void handleSave() {
     authPass[sizeof(authPass) - 1] = '\0';
   }
 
+  // F19 static-IP panel: reject (do not persist) anything that doesn't parse as a
+  // dotted-quad IPv4 address, same "validate before copy" rule as the other text
+  // fields above - a garbage eth_ip would otherwise sit unnoticed in NVS until the
+  // device happens to need the fallback path (DHCP down) and finds it broken.
+  bool ethAddressInvalid = false;
+  IPAddress ethParseTmp;
+
+  if (server.hasArg("eth_ip")) {
+    String v = server.arg("eth_ip");
+    if (ethParseTmp.fromString(v)) {
+      strncpy(ethStaticIp, v.c_str(), sizeof(ethStaticIp) - 1);
+      ethStaticIp[sizeof(ethStaticIp) - 1] = '\0';
+    } else {
+      ethAddressInvalid = true;
+    }
+  }
+
+  if (server.hasArg("eth_gw")) {
+    String v = server.arg("eth_gw");
+    if (ethParseTmp.fromString(v)) {
+      strncpy(ethStaticGateway, v.c_str(), sizeof(ethStaticGateway) - 1);
+      ethStaticGateway[sizeof(ethStaticGateway) - 1] = '\0';
+    } else {
+      ethAddressInvalid = true;
+    }
+  }
+
+  if (server.hasArg("eth_mask")) {
+    String v = server.arg("eth_mask");
+    if (ethParseTmp.fromString(v)) {
+      strncpy(ethStaticNetmask, v.c_str(), sizeof(ethStaticNetmask) - 1);
+      ethStaticNetmask[sizeof(ethStaticNetmask) - 1] = '\0';
+    } else {
+      ethAddressInvalid = true;
+    }
+  }
+
   int saveFailCount = saveDistanceConfig();
 
   if (needRestartMQTT) {
@@ -288,6 +325,10 @@ void handleSave() {
 
   if (sensorRangeInvalid) {
     alertMsg += " (sensor min/max rejected: min must be <= max)";
+  }
+
+  if (ethAddressInvalid) {
+    alertMsg += " (Ethernet static IP/gateway/netmask rejected: must be a valid IPv4 address)";
   }
 
   server.send(

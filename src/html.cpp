@@ -53,6 +53,11 @@ void handleRoot()
   html += ".btn{width:100%;padding:14px;border:none;border-radius:10px;background:#2196F3;color:white;font-size:16px;font-weight:bold;cursor:pointer;margin-top:8px;}";
   html += ".btn:hover{background:#1976D2;}";
   html += ".note{font-size:13px;color:#64748b;margin-top:6px;}";
+  html += ".tabs{display:flex;gap:8px;margin-bottom:16px;}";
+  html += ".tab-btn{flex:1;padding:12px;border:none;border-radius:10px;background:#dbeafe;color:#1565C0;font-size:15px;font-weight:bold;cursor:pointer;}";
+  html += ".tab-btn.active{background:#2196F3;color:#fff;}";
+  html += ".tab-content{display:none;}";
+  html += ".tab-content.active{display:block;}";
   html += "@media(max-width:600px){";
   html += ".card{padding:16px;}";
   html += ".field{min-width:100%;}";
@@ -67,13 +72,24 @@ void handleRoot()
   html += "}";
   html += "setInterval(update,100);";
   html += "window.onload=update;";
+  html += "function showTab(name){";
+  html += "document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));";
+  html += "document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));";
+  html += "document.getElementById('tab-'+name).classList.add('active');";
+  html += "document.getElementById('btn-'+name).classList.add('active');";
+  html += "}";
   html += "</script>";
   html += "</head>";
   html += "<body>";
   html += "<div class='card'>";
   html += "<h2>NGHI LỄ CÂN TIM NEW</h2>";
   html += "<div id='d'>Loading...</div>";
+  html += "<div class='tabs'>";
+  html += "<button type='button' id='btn-general' class='tab-btn active' onclick=\"showTab('general')\">Cấu hình</button>";
+  html += "<button type='button' id='btn-network' class='tab-btn' onclick=\"showTab('network')\">Mạng (Ethernet)</button>";
+  html += "</div>";
   html += "<form action='/save' method='POST'>";
+  html += "<div id='tab-general' class='tab-content active'>";
   html += "<div class='panel'>";
   html += "<h3>Sensor Configuration</h3>";
   for (int i = 0; i < DEVICE_NUM; i++) {
@@ -228,6 +244,31 @@ void handleRoot()
   html += "</div>";
   html += "<div class='note'>Required (HTTP Basic Auth) to Save Settings or use the Test buttons below. Change from the shipped default as soon as possible (F6).</div>";
   html += "</div>";
+  html += "</div>"; // end tab-general
+  html += "<div id='tab-network' class='tab-content'>";
+  html += "<div class='panel'>";
+  html += "<h3>Ethernet Static IP (fallback)</h3>";
+  html += "<div class='single'>";
+  html += "<label>Static IP</label>";
+  html += "<input name='eth_ip' value='";
+  html += htmlEscape(ethStaticIp);
+  html += "'>";
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label>Gateway</label>";
+  html += "<input name='eth_gw' value='";
+  html += htmlEscape(ethStaticGateway);
+  html += "'>";
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label>Netmask</label>";
+  html += "<input name='eth_mask' value='";
+  html += htmlEscape(ethStaticNetmask);
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>Thiết bị luôn thử DHCP trước (tối đa 10s lúc boot). Chỉ khi không có DHCP server, thiết bị mới tự gán IP tĩnh này để Web UI còn truy cập được. Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng IP tĩnh mới nếu rơi vào fallback.</div>";
+  html += "</div>";
+  html += "</div>"; // end tab-network
   html += "<input class='btn' type='submit' value='SAVE SETTINGS'>";
   html += "</form>";
   html += "<div class='panel'>";
