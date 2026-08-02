@@ -100,10 +100,13 @@ void WiFiEvent(arduino_event_id_t event)
 // both leave the real IP readable via ETH.localIP()). Open network (no password) on
 // purpose - it only needs to be readable in a WiFi scan list, not connected to. Auto-off
 // after DIAG_AP_DURATION_MS is handled in loop() so this doesn't keep the radio on (RF
-// noise + power) once the diagnostic window has passed.
-static void startDiagAp()
+// noise + power) once the diagnostic window has passed. `isFallback` (caller knows which
+// branch of setup()'s ETH block succeeded) picks the SSID prefix so an operator can tell
+// at a glance whether the device is on the router's real DHCP address or stuck on the
+// fixed F19 fallback (192.168.99.199 by default) - same IP text alone doesn't say which.
+static void startDiagAp(bool isFallback)
 {
-  String ssid = "CANTIM-" + ETH.localIP().toString();
+  String ssid = (isFallback ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
   if (WiFi.softAP(ssid.c_str())) {
     diagApActive = true;
     diagApStartMs = millis();
@@ -210,6 +213,7 @@ void setup()
   while (!eth_connected && (millis() - ethStart) < ETH_WAIT_MS) {
     delay(100);
   }
+  bool ethFallbackUsed = false;
   if (!eth_connected) {
     LOG("ETH did not get IP within %lu ms, applying static fallback so the Web UI stays reachable (F19)", ETH_WAIT_MS);
     // F19: no DHCP server reachable and no link-local (autoip) fallback in this build's
@@ -224,6 +228,7 @@ void setup()
     if (fallbackIp.fromString(ethStaticIp) && fallbackGw.fromString(ethStaticGateway) && fallbackMask.fromString(ethStaticNetmask)) {
       if (ETH.config(fallbackIp, fallbackGw, fallbackMask)) {
         eth_connected = true;
+        ethFallbackUsed = true;
         LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
       } else {
         LOG("ETH: static fallback ETH.config() call failed - device has no IP, Web UI unreachable");
@@ -234,7 +239,7 @@ void setup()
   }
 
   if (eth_connected) {
-    startDiagAp();
+    startDiagAp(ethFallbackUsed);
   }
 
   server.on("/", HTTP_GET, handleRoot);

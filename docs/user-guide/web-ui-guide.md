@@ -12,7 +12,11 @@ Cập nhật lần cuối: 2026-08-02 (thêm tab "Mạng (Ethernet)", thêm WiFi
 - Cắm dây mạng vào cổng W5500 trước khi cấp nguồn.
 - Lấy địa chỉ IP thiết bị từ router/DHCP server (hoặc theo dõi Serial log lúc boot nếu có kết nối USB debug — dòng `IP: ...`).
 - **Nếu mạng KHÔNG có DHCP server** (hoặc thiết bị không nhận được IP trong ~10 giây đầu sau khi cắm dây): thiết bị sẽ tự chuyển sang dùng **địa chỉ IP tĩnh cố định `192.168.99.199`** (gateway `192.168.99.1`, subnet mask `255.255.255.0`) thay vì treo không có mạng vô thời hạn. Muốn truy cập bằng IP tĩnh này, máy tính của bạn phải nằm cùng dải mạng `192.168.99.x` (ví dụ đặt IP máy tính là `192.168.99.10`, gateway/mask giống trên) rồi mở `http://192.168.99.199/`. Đây là **IP cứng dự phòng**, khác với IP router cấp bình thường — chỉ xuất hiện khi mạng thật sự không có DHCP hoạt động.
-- **Không có Serial/USB cũng tìm được IP:** trong **5 phút đầu sau khi có IP** (dù là IP DHCP thật hay IP tĩnh fallback `192.168.99.199`), thiết bị tự phát 1 mạng WiFi tên **`CANTIM-<ip-hiện-tại>`** (vd `CANTIM-192.168.8.102`), không cần mật khẩu — mở danh sách WiFi trên điện thoại/laptop, đọc tên mạng đó là biết IP ngay, không cần bắt được vào mạng đó. Sau 5 phút mạng này tự tắt để đỡ tốn điện/nhiễu sóng; muốn thấy lại thì cắm điện lại board (reset).
+- **Không có Serial/USB cũng tìm được IP:** trong **5 phút đầu sau khi có IP**, thiết bị tự phát 1 mạng WiFi chứa IP hiện tại, không cần mật khẩu — mở danh sách WiFi trên điện thoại/laptop, đọc tên mạng đó là biết IP ngay, không cần bắt được vào mạng đó. Tên mạng có 2 dạng, phân biệt luôn IP đó là thật hay fallback:
+  - **`CANTIM-DHCP-<ip>`** (vd `CANTIM-DHCP-192.168.8.102`) — IP thật do router cấp qua DHCP.
+  - **`CANTIM-STATIC-<ip>`** (vd `CANTIM-STATIC-192.168.99.199`) — đã rơi vào IP tĩnh fallback (mạng không có DHCP hoặc DHCP quá chậm, xem mục 5c) — máy tính phải đặt IP tĩnh cùng dải `192.168.99.x` mới truy cập được, không phải bắt được WiFi này là vào thẳng được.
+  
+  Sau 5 phút mạng WiFi này tự tắt để đỡ tốn điện/nhiễu sóng; muốn thấy lại thì cắm điện lại board (reset).
 - Mở trình duyệt, truy cập `http://<ip-thiết-bị>/`.
 - Trang **`/` (trang chủ) và ô trạng thái realtime luôn xem được, không cần đăng nhập.** Chỉ khi bấm **Save**, **Test MQTT**, hoặc **Test OSC**, trình duyệt mới hỏi username/password (xem mục 0 bên dưới).
 
@@ -162,7 +166,7 @@ Sau khi bấm Test, ô trạng thái realtime sẽ phản ánh đúng là đã "
 
 | Hiện tượng | Kiểm tra |
 |---|---|
-| Trang web không load | Đúng IP? Đã cắm dây mạng và đợi thiết bị lấy IP (tối đa ~10s sau boot) chưa? Nếu mạng không có DHCP, thử IP tĩnh dự phòng `192.168.99.199` (xem mục 1). Không biết chính xác IP → trong 5 phút đầu sau boot, mở WiFi trên điện thoại, tìm mạng tên `CANTIM-<ip>` để đọc IP thật (xem mục 1). |
+| Trang web không load | Đúng IP? Đã cắm dây mạng và đợi thiết bị lấy IP (tối đa ~10s sau boot) chưa? Nếu mạng không có DHCP, thử IP tĩnh dự phòng `192.168.99.199` (xem mục 1). Không biết chính xác IP → trong 5 phút đầu sau boot, mở WiFi trên điện thoại, tìm mạng `CANTIM-DHCP-<ip>` hoặc `CANTIM-STATIC-<ip>` để đọc IP thật + biết luôn là IP DHCP hay fallback (xem mục 1). |
 | Trình duyệt hỏi username/password khi bấm Save/Test | Bình thường (F6, xem mục 0) — mặc định `admin`/`admin` nếu chưa từng đổi. Đăng nhập sai lặp lại → kiểm tra panel Admin Auth đã lưu đúng chưa, hoặc hỏi người đã đổi mật khẩu gần nhất. |
 | Sensor báo `OFFLINE` | Kiểm tra dây RS485 tới sensor đó, hoặc sensor đã bị tắt trong cấu hình nhưng vẫn hiển thị offline (bình thường nếu tắt). |
 | Trạng thái không đổi dù có người | Kiểm tra sensor đó có đang **bật (enable)** không, và khoảng cách đo được (ô trạng thái realtime) có nằm trong MIN/MAX đã cấu hình không. |
