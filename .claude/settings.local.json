@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn \"NVS_KEY_NAME_MAX_SIZE\" ~/.platformio/packages/framework-arduinoespressif32-libs/esp32s3/include/nvs_flash/include/nvs.h 2>/dev/null | head -20; echo \"---\"; find ~/.platformio -name \"nvs.h\" -path \"*nvs_flash*\" 2>/dev/null | head -5)"
+    ]
+  }
+}
