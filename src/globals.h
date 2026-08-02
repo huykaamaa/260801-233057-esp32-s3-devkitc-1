@@ -102,6 +102,19 @@ extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;
 extern bool eth_connected;
 
+// --- Ethernet static-IP fallback (F19) ---------------------------------------------------
+// If no DHCP server is reachable, lwIP's DHCP client retries forever and this build has no
+// CONFIG_LWIP_AUTOIP (no link-local self-assigned-IP fallback either) - the device would
+// otherwise NEVER get an IP, and loop() only services the Web UI's HTTP socket while
+// eth_connected is true, so the device becomes permanently unreachable with no way to
+// reconfigure/diagnose it remotely. setup() falls back to ETH.config(ethStaticIp, ...) once
+// the bounded DHCP wait (ETH_WAIT_MS) times out. NVS-backed (get in setup(), put in
+// saveDistanceConfig()) like every other field here, even though there is no Web UI panel to
+// edit them yet - that keeps the storage layer ready for one without another NVS migration.
+extern char ethStaticIp[16];
+extern char ethStaticGateway[16];
+extern char ethStaticNetmask[16];
+
 // Returns the number of failed put*() calls (0 = fully saved), or -1 if
 // prefs.begin() itself failed (namespace could not be opened, nothing was written).
 int saveDistanceConfig();

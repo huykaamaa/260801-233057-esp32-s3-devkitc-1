@@ -54,6 +54,14 @@ unsigned long stateTimer = 0;        // Thời gian bắt đầu xác nhận tr�
 unsigned long confirmTime = 500;     // ms đợi xác nhận thay đổi trạng thái
 bool eth_connected = false;         // Trạng thái kết nối Ethernet
 
+// F19 static-IP fallback defaults - same /24 as this firmware's other hardcoded LAN
+// defaults (mqttServer 192.168.99.225, oscIp 192.168.99.100). .199 is a judgment call
+// picked to avoid colliding with those two; the operator's ACTUAL network is unknown to
+// this fix and may not be 192.168.99.0/24 at all - see setup() and commit message.
+char ethStaticIp[16] = "192.168.99.199";
+char ethStaticGateway[16] = "192.168.99.1";
+char ethStaticNetmask[16] = "255.255.255.0";
+
 void WiFiEvent(arduino_event_id_t event)
 {
   switch (event) {
@@ -151,6 +159,13 @@ void setup()
     strncpy(authPass, prefs.getString(NVS_KEY("auth_pass"), "admin").c_str(), sizeof(authPass) - 1);
     authPass[sizeof(authPass) - 1] = '\0';
 
+    strncpy(ethStaticIp, prefs.getString(NVS_KEY("eth_ip"), "192.168.99.199").c_str(), sizeof(ethStaticIp) - 1);
+    ethStaticIp[sizeof(ethStaticIp) - 1] = '\0';
+    strncpy(ethStaticGateway, prefs.getString(NVS_KEY("eth_gw"), "192.168.99.1").c_str(), sizeof(ethStaticGateway) - 1);
+    ethStaticGateway[sizeof(ethStaticGateway) - 1] = '\0';
+    strncpy(ethStaticNetmask, prefs.getString(NVS_KEY("eth_mask"), "255.255.255.0").c_str(), sizeof(ethStaticNetmask) - 1);
+    ethStaticNetmask[sizeof(ethStaticNetmask) - 1] = '\0';
+
     prefs.end();
   }
 
@@ -174,7 +189,26 @@ void setup()
     delay(100);
   }
   if (!eth_connected) {
-    LOG("ETH did not get IP within %lu ms, continuing without Ethernet", ETH_WAIT_MS);
+    LOG("ETH did not get IP within %lu ms, applying static fallback so the Web UI stays reachable (F19)", ETH_WAIT_MS);
+    // F19: no DHCP server reachable and no link-local (autoip) fallback in this build's
+    // sdkconfig -> without this, lwIP's DHCP client would keep retrying forever, the device
+    // would never get an IP, and loop() only services the Web UI's HTTP socket while
+    // eth_connected is true - the device would be permanently unreachable with no remote
+    // way to reconfigure/diagnose it. ETH.config() with a non-zero local_ip stops the DHCP
+    // client and applies a static IP immediately (see NetworkInterface::config()); it does
+    // NOT raise ARDUINO_EVENT_ETH_GOT_IP (that event only fires from the DHCP-client IP_EVENT
+    // path), so eth_connected is set here explicitly rather than relying on WiFiEvent().
+    IPAddress fallbackIp, fallbackGw, fallbackMask;
+    if (fallbackIp.fromString(ethStaticIp) && fallbackGw.fromString(ethStaticGateway) && fallbackMask.fromString(ethStaticNetmask)) {
+      if (ETH.config(fallbackIp, fallbackGw, fallbackMask)) {
+        eth_connected = true;
+        LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
+      } else {
+        LOG("ETH: static fallback ETH.config() call failed - device has no IP, Web UI unreachable");
+      }
+    } else {
+      LOG("ETH: static fallback IP/gateway/netmask string failed to parse - check eth_ip/eth_gw/eth_mask in NVS");
+    }
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -380,6 +414,9 @@ int saveDistanceConfig()
   checkFixed(prefs.putULong(NVS_KEY("confirm"), confirmTime), "confirm");
   checkStr(prefs.putString(NVS_KEY("auth_user"), authUser), authUser, "auth_user");
   checkStr(prefs.putString(NVS_KEY("auth_pass"), authPass), authPass, "auth_pass");
+  checkStr(prefs.putString(NVS_KEY("eth_ip"), ethStaticIp), ethStaticIp, "eth_ip");
+  checkStr(prefs.putString(NVS_KEY("eth_gw"), ethStaticGateway), ethStaticGateway, "eth_gw");
+  checkStr(prefs.putString(NVS_KEY("eth_mask"), ethStaticNetmask), ethStaticNetmask, "eth_mask");
   checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
 
   prefs.end();
