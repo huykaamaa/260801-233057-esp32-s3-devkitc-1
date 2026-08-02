@@ -2,7 +2,7 @@
 
 > Bản đồ code cho developer/session sau. Cập nhật **cùng commit** khi thêm file mới hoặc tách file (xem `CLAUDE.md` mục 1-3, mục Documentation Requirements).
 
-Cập nhật lần cuối: 2026-08-02 (thêm panel Web UI cho Ethernet static IP fallback).
+Cập nhật lần cuối: 2026-08-02 (thêm panel Web UI cho Ethernet static IP fallback; thêm WiFi AP chẩn đoán `startDiagAp()`).
 
 ---
 
@@ -47,6 +47,7 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 - `lastState`, `actionDone`, `stateTimer`, `confirmTime` — máy trạng thái debounce (xem `checkDistance()` bên dưới).
 - `publishedState` — trạng thái FULL/MISSING **đã thực sự publish** (MQTT/OSC) lần gần nhất, tách riêng khỏi `lastState` (chỉ track input debounce thô). Thêm sau finding 4.1: dùng `lastState` làm proxy cho "đã publish gì" khiến nhiễu quanh ngưỡng có thể re-fire cùng 1 cue FULL/MISSING dù chưa có thay đổi occupancy thật. `checkDistance()` giờ gate việc gọi `triggerFull()`/`triggerMissing()` bằng `currentState != publishedState` **cộng thêm** debounce `actionDone`/`confirmTime` cũ, không thay thế nó.
 - `eth_connected` — cờ Ethernet đã có IP hay chưa (set qua `WiFiEvent()` khi DHCP thành công, HOẶC set thẳng trong `setup()` khi rơi vào static-IP fallback — xem `ethStaticIp` bên dưới, `ETH.config()` không tự bắn `ARDUINO_EVENT_ETH_GOT_IP`).
+- `diagApActive` (bool), `diagApStartMs` (unsigned long), `DIAG_AP_DURATION_MS` (const, 5 phút) — file-local `static` trong `cantim_mqtt_new.cpp` (không extern, không dùng ở file khác). State cho WiFi AP chẩn đoán, xem `startDiagAp()` bên dưới.
 - `authUser[32]`, `authPass[32]` — username/password cho HTTP Basic Auth trên `/save`, `/test_mqtt`, `/test_osc` (F6). Mặc định `"admin"`/`"admin"`, log rõ ra Serial mỗi lần boot nếu vẫn còn giá trị mặc định. Load/save qua NVS key `auth_user`/`auth_pass`, sửa qua panel **Admin Auth** trên Web UI (`html.cpp`).
 - `ethStaticIp[16]`, `ethStaticGateway[16]`, `ethStaticNetmask[16]` — địa chỉ IP tĩnh dùng khi DHCP không thành công sau `ETH_WAIT_MS` (F19). Mặc định `192.168.99.199` / gateway `192.168.99.1` / netmask `255.255.255.0`. NVS key `eth_ip`/`eth_gw`/`eth_mask`, load/save đầy đủ, sửa được qua panel **Mạng (Ethernet)** trên Web UI (`html.cpp`) — xem field `eth_ip`/`eth_gw`/`eth_mask` trong `web.cpp::handleSave()`.
 
@@ -54,11 +55,12 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 
 ---
 
-## `src/cantim_mqtt_new.cpp` (364 dòng) — entry point
+## `src/cantim_mqtt_new.cpp` (485 dòng) — entry point
 
 File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `globals.h`), `setup()`, `loop()`, đọc RS485, máy trạng thái FULL/MISSING.
 
 - `WiFiEvent(event)` — callback `WiFi.onEvent`, cập nhật `eth_connected` theo sự kiện `ARDUINO_EVENT_ETH_*`.
+- `startDiagAp()` (static) — bật WiFi SoftAP tạm thời, SSID `"CANTIM-" + ETH.localIP().toString()` (không mật khẩu, chỉ để đọc tên mạng, không cần kết nối thật), gọi 1 lần từ `setup()` ngay sau khi `eth_connected == true` (cả DHCP thành công lẫn static fallback đều gọi, vì `ETH.localIP()` phản ánh đúng IP hiện tại ở cả 2 nhánh). Mục đích: kỹ thuật viên đọc IP thiết bị từ danh sách WiFi trên điện thoại, khỏi cần cắm USB + mở Serial Monitor. `loop()` tự tắt AP (`WiFi.softAPdisconnect(true)`) sau `DIAG_AP_DURATION_MS` (5 phút) để không tốn RF/điện liên tục sau khi qua giai đoạn chẩn đoán.
 - `setup()`:
   1. Khởi động `Serial` (chờ tối đa 2s, không block vô hạn).
   2. `RS485.begin(...)` trên UART1.
@@ -66,7 +68,7 @@ File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `gl
   4. Khởi tạo SPI + Ethernet W5500 (`ETH.begin`). Chờ có IP tối đa `ETH_WAIT_MS = 10000` bằng vòng lặp có timeout dựa trên `millis()` (không phải `while(!eth_connected)` vô hạn — đã fix so với Bug 2 trong spec doc cũ). Hết giờ mà vẫn chưa có IP (không tìm thấy DHCP server) → gọi `ETH.config(ethStaticIp, ethStaticGateway, ethStaticNetmask)` áp IP tĩnh fallback (F19, mặc định `192.168.99.199`/gw `192.168.99.1`/mask `255.255.255.0`), set `eth_connected = true` thủ công (`ETH.config()` không tự bắn `ARDUINO_EVENT_ETH_GOT_IP` — sự kiện đó chỉ tới từ nhánh DHCP-client) rồi tiếp tục boot; nếu vẫn không parse được các địa chỉ static (chuỗi NVS hỏng) thì log lỗi và boot tiếp không mạng, giống hành vi cũ.
   5. Đăng ký route HTTP (`/`, `/data`, `/save`, `/test_mqtt`, `/test_osc`), `server.begin()`, `oscUdp.begin(9000)`.
   6. `mqttInit()`.
-- `loop()`: `server.handleClient()` (chỉ khi `eth_connected`) → `readRS485()` → `checkDistance()`. Không có `delay()` dài, không block.
+- `loop()`: `server.handleClient()` (chỉ khi `eth_connected`) → kiểm tra tắt Diag AP nếu quá `DIAG_AP_DURATION_MS` (so `millis()`, không block) → `readRS485()` → `checkDistance()`. Không có `delay()` dài, không block.
 - `readRS485()` — đọc byte từ UART1 vào buffer `char[128]` (có kiểm tra tràn, log `"RS485 buffer overflow"` và reset `bufPos` nếu vượt), tách theo `\n`, gọi `parseSensorLine()` (từ `sensor_logic.h`) để tách `id,distance`, ghi vào `rsDistance[]`/`lastRS485[]` qua `isValidDeviceId()`. Thêm inter-byte timeout 200ms (`RS485_INTERBYTE_TIMEOUT_MS`, F27/4.4): nếu byte mới tới cách byte trước đó >200ms trong khi buffer đang có 1 dòng dở (chưa gặp `\n`), coi phần dở đó là "stale" (log rồi drop) trước khi append byte mới, thay vì âm thầm nối nó vào đầu dòng kế tiếp và làm hỏng cả 2 dòng.
 - `checkDistance()` — máy trạng thái debounce:
   - Đếm số sensor **enabled** đang trong ngưỡng (`isDistanceInRange()`) và chưa timeout (`RS485_TIMEOUT`).

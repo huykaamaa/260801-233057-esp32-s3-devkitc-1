@@ -60,6 +60,14 @@ char ethStaticIp[16] = "192.168.99.199";
 char ethStaticGateway[16] = "192.168.99.1";
 char ethStaticNetmask[16] = "255.255.255.0";
 
+// Diagnostic WiFi AP - broadcasts the current ETH IP as its SSID for a few minutes after
+// boot so an operator can read the device's IP off a phone's WiFi list instead of needing
+// a USB cable + Serial monitor (see startDiagAp()). File-local only (static), nothing
+// outside this file needs it.
+static const unsigned long DIAG_AP_DURATION_MS = 5UL * 60UL * 1000UL; // 5 phut
+static bool diagApActive = false;
+static unsigned long diagApStartMs = 0;
+
 void WiFiEvent(arduino_event_id_t event)
 {
   switch (event) {
@@ -85,6 +93,23 @@ void WiFiEvent(arduino_event_id_t event)
       break;
     default:
       break;
+  }
+}
+
+// Called once right after eth_connected becomes true (DHCP success or static fallback -
+// both leave the real IP readable via ETH.localIP()). Open network (no password) on
+// purpose - it only needs to be readable in a WiFi scan list, not connected to. Auto-off
+// after DIAG_AP_DURATION_MS is handled in loop() so this doesn't keep the radio on (RF
+// noise + power) once the diagnostic window has passed.
+static void startDiagAp()
+{
+  String ssid = "CANTIM-" + ETH.localIP().toString();
+  if (WiFi.softAP(ssid.c_str())) {
+    diagApActive = true;
+    diagApStartMs = millis();
+    LOG("Diag AP: broadcasting '%s' for %lu min", ssid.c_str(), DIAG_AP_DURATION_MS / 60000UL);
+  } else {
+    LOG("Diag AP: WiFi.softAP() failed");
   }
 }
 
@@ -208,6 +233,10 @@ void setup()
     }
   }
 
+  if (eth_connected) {
+    startDiagAp();
+  }
+
   server.on("/", HTTP_GET, handleRoot);
   server.on("/data", HTTP_GET, handleData);
   server.on("/save", HTTP_POST, handleSave);
@@ -224,6 +253,12 @@ void loop()
 {
   if (eth_connected) {
     server.handleClient();
+  }
+
+  if (diagApActive && (millis() - diagApStartMs) >= DIAG_AP_DURATION_MS) {
+    WiFi.softAPdisconnect(true);
+    diagApActive = false;
+    LOG("Diag AP: turned off after %lu min", DIAG_AP_DURATION_MS / 60000UL);
   }
 
   readRS485();
