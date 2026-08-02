@@ -237,12 +237,32 @@ void readRS485()
 {
   static char buffer[128];
   static size_t bufPos = 0;
+  static unsigned long lastByteMs = 0;
+
+  // Cluster H / 4.4: no inter-line timeout meant a truncated/dropped line (byte loss,
+  // power glitch on the bus) left partial bytes sitting in `buffer` forever, silently
+  // glued onto the FRONT of whatever the next line happened to be. At 115200 baud a
+  // short "id,distance\r\n" frame (a handful of bytes) transmits in well under 1ms, so
+  // any real gap between bytes of the SAME line should be sub-millisecond; a few hundred
+  // ms of silence mid-line can only mean the sender stopped/dropped out. 200ms is chosen
+  // as a generous margin above realistic inter-byte jitter while still being short enough
+  // to recover quickly once new data resumes (real bus timing on this specific
+  // installation was not measured, so this is a conservative round number, not a
+  // calibrated value).
+  const unsigned long RS485_INTERBYTE_TIMEOUT_MS = 200;
 
   while (RS485.available()) {
     int c = RS485.read();
     if (c < 0) {
       break;
     }
+
+    unsigned long now = millis();
+    if (bufPos > 0 && (now - lastByteMs) > RS485_INTERBYTE_TIMEOUT_MS) {
+      LOG("RS485: stale partial line dropped (inter-byte timeout)");
+      bufPos = 0;
+    }
+    lastByteMs = now;
 
     if (c == '\r') {
       continue;

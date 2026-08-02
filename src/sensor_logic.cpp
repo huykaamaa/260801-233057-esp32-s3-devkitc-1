@@ -15,8 +15,23 @@ bool parseSensorLine(const char* line, int& id, int& distance)
     return false;
   }
 
-  id = static_cast<int>(strtol(line, nullptr, 10));
-  distance = static_cast<int>(strtol(comma + 1, nullptr, 10));
+  // 4.5 fix: strtol() alone can't tell "0" from "no digits at all" (e.g. "ERR", "NaN",
+  // or an empty field). Check endptr so a field with zero consumed digits is rejected
+  // instead of silently becoming a fabricated 0 that then masquerades as a real reading.
+  char* idEnd = nullptr;
+  long idVal = strtol(line, &idEnd, 10);
+  if (idEnd == line) {
+    return false;
+  }
+
+  char* distEnd = nullptr;
+  long distVal = strtol(comma + 1, &distEnd, 10);
+  if (distEnd == comma + 1) {
+    return false;
+  }
+
+  id = static_cast<int>(idVal);
+  distance = static_cast<int>(distVal);
   return true;
 }
 
