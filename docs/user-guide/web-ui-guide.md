@@ -9,13 +9,26 @@ Cập nhật lần cuối: 2026-08-02.
 ## 1. Truy cập trang cấu hình
 
 - Thiết bị dùng **Ethernet (dây LAN)**, không dùng WiFi.
-- Cắm dây mạng vào cổng W5500 trước khi cấp nguồn (nếu chưa cắm, thiết bị vẫn khởi động sau ~10 giây chờ, nhưng sẽ không có địa chỉ IP nên không truy cập được web cho tới khi cắm dây và thiết bị lấy được IP).
+- Cắm dây mạng vào cổng W5500 trước khi cấp nguồn.
 - Lấy địa chỉ IP thiết bị từ router/DHCP server (hoặc theo dõi Serial log lúc boot nếu có kết nối USB debug — dòng `IP: ...`).
+- **Nếu mạng KHÔNG có DHCP server** (hoặc thiết bị không nhận được IP trong ~10 giây đầu sau khi cắm dây): thiết bị sẽ tự chuyển sang dùng **địa chỉ IP tĩnh cố định `192.168.99.199`** (gateway `192.168.99.1`, subnet mask `255.255.255.0`) thay vì treo không có mạng vô thời hạn. Muốn truy cập bằng IP tĩnh này, máy tính của bạn phải nằm cùng dải mạng `192.168.99.x` (ví dụ đặt IP máy tính là `192.168.99.10`, gateway/mask giống trên) rồi mở `http://192.168.99.199/`. Đây là **IP cứng dự phòng**, khác với IP router cấp bình thường — chỉ xuất hiện khi mạng thật sự không có DHCP hoạt động.
 - Mở trình duyệt, truy cập `http://<ip-thiết-bị>/`.
+- Trang **`/` (trang chủ) và ô trạng thái realtime luôn xem được, không cần đăng nhập.** Chỉ khi bấm **Save**, **Test MQTT**, hoặc **Test OSC**, trình duyệt mới hỏi username/password (xem mục 0 bên dưới).
 
 Trang chủ hiển thị:
-- **Ô trạng thái realtime** (đầu trang) — tự cập nhật mỗi 100ms: trạng thái kết nối MQTT, trạng thái bật/tắt OSC, trạng thái **FULL / MISSING** hiện tại, và khoảng cách đo được của từng sensor (hoặc `OFFLINE` nếu sensor không gửi dữ liệu quá 5 giây).
-- **Form cấu hình** bên dưới, chia theo 4 nhóm: Sensor, MQTT, OSC, Confirm Time.
+- **Ô trạng thái realtime** (đầu trang) — tự cập nhật mỗi 100ms: trạng thái kết nối MQTT, trạng thái bật/tắt OSC, trạng thái **FULL / MISSING / [!] NO SENSORS ENABLED** hiện tại (xem mục 2 để phân biệt), và khoảng cách đo được của từng sensor (hoặc `OFFLINE` nếu sensor không gửi dữ liệu quá 5 giây).
+- **Form cấu hình** bên dưới, chia theo 5 nhóm: Sensor, MQTT, OSC, Confirm Time, Admin Auth.
+
+---
+
+## 0. Đăng nhập (Basic Auth) — mặc định `admin` / `admin`
+
+Từ bản cập nhật này, các thao tác **thay đổi cấu hình/trạng thái thiết bị** — bấm **SAVE SETTINGS**, **Test MQTT**, **Test OSC** — yêu cầu đăng nhập bằng cửa sổ popup của trình duyệt (HTTP Basic Auth), để tránh người lạ trên cùng mạng LAN đổi cấu hình hoặc kích test mà không được phép. Xem trang trạng thái (`/`) thì **không** cần đăng nhập.
+
+- **Username / Password mặc định: `admin` / `admin`.** Thiết bị mới (hoặc chưa từng đổi) sẽ log rõ dòng cảnh báo này ra Serial mỗi lần khởi động, để không ai quên đổi.
+- **Đổi mật khẩu:** cuộn xuống panel **Admin Auth** ở cuối form cấu hình, nhập username/password mới rồi bấm **SAVE SETTINGS**. Có thể để trống 1 trong 2 ô (username hoặc password) nếu chỉ muốn đổi ô còn lại — ô để trống giữ nguyên giá trị cũ, không bị xoá.
+- Ô password trên form **luôn hiển thị rỗng** kể cả sau khi đã đặt mật khẩu (không hiện lại mật khẩu hiện tại vì lý do bảo mật) — đây là bình thường, không phải lỗi mất dữ liệu.
+- **Đổi mật khẩu ngay khi lắp đặt thiết bị mới** nếu thiết bị nằm trên mạng có nhiều người truy cập được — mật khẩu mặc định `admin`/`admin` là công khai (ghi trong tài liệu này).
 
 ---
 
@@ -35,6 +48,10 @@ Nếu chỉ dùng ít hơn 3 sensor thật, hãy **tắt (uncheck)** các sensor
 
 Giá trị mặc định (khi chưa từng Save lần nào): MIN = 200mm, MAX = 800mm, cả 3 sensor đều bật.
 
+**Lưu ý MIN/MAX:** khi Save, thiết bị kiểm tra MIN phải ≤ MAX cho từng sensor — nếu nhập MIN lớn hơn MAX, cặp giá trị đó **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), các trường khác vẫn lưu bình thường.
+
+**Nếu tắt (uncheck) HẾT cả 3 sensor:** ô trạng thái sẽ hiện badge màu **cam "[!] NO SENSORS ENABLED"** thay vì badge đỏ MISSING thông thường. Đây là dấu hiệu **thiết bị chưa cấu hình sensor nào**, không phải "phòng đang trống" — kiểm tra lại panel Sensor Configuration nếu thấy badge này ngoài ý muốn.
+
 ---
 
 ## 3. MQTT Settings
@@ -50,6 +67,8 @@ Giá trị mặc định (khi chưa từng Save lần nào): MIN = 200mm, MAX = 
 | **MISSING Message** | Nội dung payload gửi khi trạng thái chuyển sang MISSING (mặc định `MISSING`). |
 
 **Lưu ý:** đổi IP/Port/Username/Password và bấm **Save** sẽ khiến thiết bị **kết nối lại MQTT ngay lập tức** (mất kết nối cũ, tạo kết nối mới với thông tin vừa nhập). Đổi Topic/FULL Message/MISSING Message thì không cần kết nối lại, áp dụng ngay cho lần publish kế tiếp.
+
+**MQTT Port** phải là số nguyên từ 1 đến 65535 — nhập sai định dạng hoặc ngoài khoảng này sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), port cũ vẫn giữ nguyên.
 
 ---
 
@@ -69,30 +88,54 @@ OSC dùng để gửi tín hiệu tới phần mềm trình chiếu/ánh sáng (
 
 FULL và MISSING có thể dùng **cùng 1 address với giá trị khác nhau** (vd `1` = FULL, `0` = MISSING) hoặc **2 address khác nhau tùy nhu cầu** — cấu hình độc lập cho từng state.
 
+**OSC Port** cùng quy tắc với MQTT Port ở trên: số nguyên 1-65535, sai thì bị từ chối không lưu.
+
+**FULL Address / MISSING Address** phải **bắt đầu bằng dấu `/`** (chuẩn OSC, vd `/composition/layers/1/select`) — nhập thiếu dấu `/` đầu sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save).
+
 ---
 
 ## 5. Confirm Settings
 
 | Trường | Ý nghĩa |
 |---|---|
-| **Confirm Time (ms)** | Thời gian (mili-giây) trạng thái phải giữ ổn định liên tục trước khi thiết bị mới publish MQTT/OSC. Mặc định 1000ms (1 giây). |
+| **Confirm Time (ms)** | Thời gian (mili-giây) trạng thái phải giữ ổn định liên tục trước khi thiết bị mới publish MQTT/OSC. Mặc định 1000ms (1 giây). Giá trị nhập vào tự động giới hạn trong khoảng **50 - 60000ms** (nhập ngoài khoảng này sẽ tự kéo về giá trị gần nhất trong khoảng, không bị từ chối). |
 
 Dùng để chống nhiễu (debounce): nếu người đứng gần ranh giới ngưỡng khiến trạng thái nhấp nháy FULL/MISSING liên tục, tăng giá trị này để chờ ổn định lâu hơn rồi mới publish, tránh spam MQTT/OSC.
 
 ---
 
+## 5b. Admin Auth
+
+| Trường | Ý nghĩa |
+|---|---|
+| **Username** | Tên đăng nhập cho popup Basic Auth khi bấm Save/Test (mặc định `admin`). |
+| **Password** | Mật khẩu tương ứng (mặc định `admin`). Ô này luôn hiện rỗng trên form — để trống khi Save nghĩa là giữ nguyên mật khẩu cũ. |
+
+Xem mục 0 ở đầu tài liệu để biết chi tiết cách đăng nhập và lý do panel này tồn tại.
+
+---
+
 ## 6. Lưu cấu hình
 
-Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên (Sensor + MQTT + OSC + Confirm Time) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Sau khi Save, trang sẽ hiện thông báo "Saved OK" rồi tự tải lại.
+Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên (Sensor + MQTT + OSC + Confirm Time + Admin Auth) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Trình duyệt sẽ hỏi username/password (xem mục 0) trước khi thực hiện. Sau khi Save, trang sẽ hiện thông báo:
+- **"Saved OK"** — mọi trường lưu thành công.
+- **"Saved with N error(s) - check Serial log"** hoặc **"Save FAILED - NVS not accessible, check Serial log"** — có trường không lưu được, cần xem log Serial (kỹ thuật viên) để biết nguyên nhân.
+- Kèm thêm ghi chú field cụ thể bị từ chối nếu có, ví dụ `(OSC address rejected: must start with /)`, `(MQTT port rejected: must be 1-65535)`, `(sensor min/max rejected: min must be <= max)`.
 
-⚠️ Save áp dụng cho **tất cả** trường cùng lúc, không lưu riêng từng nhóm.
+Sau khi hiện thông báo, trang tự tải lại.
+
+⚠️ Save áp dụng cho **tất cả** trường cùng lúc, không lưu riêng từng nhóm. Field bị từ chối (không hợp lệ) sẽ **không** ghi đè giá trị cũ, các field hợp lệ khác trong cùng lần Save vẫn được lưu bình thường.
 
 ---
 
 ## 7. Test Settings
 
+Cả 2 nút Test đều yêu cầu đăng nhập (xem mục 0).
+
 - **Test MQTT (FULL)** — kích hoạt thủ công hành vi "FULL" (publish MQTT + gửi OSC như khi thật sự đủ người) để kiểm tra kết nối/cấu hình mà không cần đợi người đứng vào vị trí sensor.
 - **Test OSC (FULL)** — hiện tại có cùng hành vi với nút Test MQTT ở trên (đều kích hoạt trạng thái FULL). Nếu cần test riêng trạng thái MISSING, phải đợi sensor thật báo MISSING hoặc yêu cầu bổ sung nút test riêng.
+
+Sau khi bấm Test, ô trạng thái realtime sẽ phản ánh đúng là đã "publish FULL" (không còn bị lệch/kẹt trạng thái do bấm Test) — nếu ngay sau đó sensor thật báo MISSING, thiết bị sẽ publish MISSING bình thường ở lần chuyển kế tiếp, không bị kẹt chờ một sự kiện không liên quan mới chịu publish.
 
 ---
 
@@ -100,8 +143,11 @@ Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường
 
 | Hiện tượng | Kiểm tra |
 |---|---|
-| Trang web không load | Đúng IP? Đã cắm dây mạng và đợi thiết bị lấy IP (tối đa ~10s sau boot) chưa? |
+| Trang web không load | Đúng IP? Đã cắm dây mạng và đợi thiết bị lấy IP (tối đa ~10s sau boot) chưa? Nếu mạng không có DHCP, thử IP tĩnh dự phòng `192.168.99.199` (xem mục 1). |
+| Trình duyệt hỏi username/password khi bấm Save/Test | Bình thường (F6, xem mục 0) — mặc định `admin`/`admin` nếu chưa từng đổi. Đăng nhập sai lặp lại → kiểm tra panel Admin Auth đã lưu đúng chưa, hoặc hỏi người đã đổi mật khẩu gần nhất. |
 | Sensor báo `OFFLINE` | Kiểm tra dây RS485 tới sensor đó, hoặc sensor đã bị tắt trong cấu hình nhưng vẫn hiển thị offline (bình thường nếu tắt). |
 | Trạng thái không đổi dù có người | Kiểm tra sensor đó có đang **bật (enable)** không, và khoảng cách đo được (ô trạng thái realtime) có nằm trong MIN/MAX đã cấu hình không. |
+| Thấy badge cam **"[!] NO SENSORS ENABLED"** | Không phải lỗi mạng/sensor — nghĩa là **tất cả** sensor đang tắt (uncheck) trong panel Sensor Configuration. Bật lại ít nhất 1 sensor. |
 | MQTT hiện `DISCONNECTED` | Kiểm tra IP/Port/Username/Password broker, và broker có đang chạy/cho phép kết nối từ thiết bị không. |
+| Save báo lỗi ("rejected"/"error(s)") thay vì "Saved OK" | Đọc kỹ ghi chú field bị từ chối trong thông báo (OSC address thiếu `/`, port ngoài khoảng 1-65535, MIN > MAX) — sửa đúng field đó rồi Save lại; các field khác đã lưu vẫn giữ nguyên. |
 | Đổi 1 field rồi Save, field khác bị mất giá trị | Không nên xảy ra (Save ghi toàn bộ form) — nếu gặp, báo lại kèm field cụ thể để kiểm tra code. |
