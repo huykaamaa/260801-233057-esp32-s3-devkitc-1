@@ -313,10 +313,16 @@ void checkDistance()
       continue;
     }
 
-    requiredCount++;
+    // Sensor bị timeout RS485 (offline) bị loại hẳn khỏi requiredCount, không chỉ khỏi
+    // countOK - nếu vẫn tính vào requiredCount thì countOK không bao giờ theo kịp được nữa
+    // (sensor offline không thể "trong ngưỡng"), khiến trạng thái kẹt ở MISSING vĩnh viễn dù
+    // các sensor còn lại đang online và đúng ngưỡng. Sensor online trở lại tự động được tính
+    // lại vào requiredCount ở lần loop kế tiếp.
     if (millis() - lastRS485[i] > RS485_TIMEOUT) {
       continue;
     }
+
+    requiredCount++;
     int d = rsDistance[i];
     if (isDistanceInRange(d, distanceMin[i], distanceMax[i])) {
       countOK++;
