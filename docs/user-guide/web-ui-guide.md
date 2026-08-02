@@ -2,7 +2,7 @@
 
 > Dành cho người vận hành thiết bị (không cần biết code). Mô tả toàn bộ tính năng hiện có trên trang cấu hình web của thiết bị.
 
-Cập nhật lần cuối: 2026-08-02.
+Cập nhật lần cuối: 2026-08-02 (thêm tab "Mạng (Ethernet)").
 
 ---
 
@@ -17,7 +17,7 @@ Cập nhật lần cuối: 2026-08-02.
 
 Trang chủ hiển thị:
 - **Ô trạng thái realtime** (đầu trang) — tự cập nhật mỗi 100ms: trạng thái kết nối MQTT, trạng thái bật/tắt OSC, trạng thái **FULL / MISSING / [!] NO SENSORS ENABLED** hiện tại (xem mục 2 để phân biệt), và khoảng cách đo được của từng sensor (hoặc `OFFLINE` nếu sensor không gửi dữ liệu quá 5 giây).
-- **Form cấu hình** bên dưới, chia theo 5 nhóm: Sensor, MQTT, OSC, Confirm Time, Admin Auth.
+- **2 tab** ngay dưới ô trạng thái: **"Cấu hình"** (Sensor, MQTT, OSC, Confirm Time, Admin Auth — mục 2-5b) và **"Mạng (Ethernet)"** (mục 5c). Bấm tab để chuyển qua lại, không tải lại trang. Nút **SAVE SETTINGS** lưu **cả 2 tab cùng lúc** dù đang đứng ở tab nào (xem mục 6).
 
 ---
 
@@ -115,12 +115,30 @@ Xem mục 0 ở đầu tài liệu để biết chi tiết cách đăng nhập v
 
 ---
 
+## 5c. Mạng (Ethernet) — IP tĩnh dự phòng
+
+Nằm ở tab **"Mạng (Ethernet)"** riêng (xem mục 1), không chung tab với các panel còn lại.
+
+| Trường | Ý nghĩa |
+|---|---|
+| **Static IP** | Địa chỉ IP tĩnh dự phòng. Mặc định `192.168.99.199`. |
+| **Gateway** | Gateway tương ứng. Mặc định `192.168.99.1`. |
+| **Netmask** | Subnet mask tương ứng. Mặc định `255.255.255.0`. |
+
+**Đây KHÔNG phải IP chính của thiết bị.** Thiết bị luôn thử xin IP qua DHCP trước (tối đa ~10 giây mỗi lần boot). 3 giá trị ở tab này **chỉ được dùng khi DHCP thất bại** (mạng không có DHCP server, hoặc router chưa cấp IP kịp trong 10 giây đó) — lúc đó thiết bị tự gán 3 giá trị này làm IP của chính nó, để Web UI vẫn còn truy cập được thay vì mất mạng hoàn toàn (xem thêm mục 1, mục 8).
+
+- Mỗi ô phải là **địa chỉ IPv4 hợp lệ** (dạng `a.b.c.d`, ví dụ `192.168.99.199`) — nhập sai định dạng sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), giá trị cũ vẫn giữ nguyên.
+- **Đổi giá trị ở đây không có tác dụng ngay lập tức.** Thiết bị chỉ đọc lại 3 giá trị này lúc **boot** (cắm điện lại) và **chỉ khi lần đó DHCP thất bại**. Nếu mạng vẫn có DHCP hoạt động bình thường, đổi IP tĩnh dự phòng ở đây sẽ **không thấy thay đổi gì** trên thiết bị đang chạy — đó là bình thường, không phải lỗi.
+- Muốn xác nhận IP tĩnh mới đã áp dụng: rút dây mạng (hoặc tắt DHCP server) rồi cắm lại điện thiết bị, đợi ~10 giây, sau đó truy cập bằng IP tĩnh vừa đặt.
+
+---
+
 ## 6. Lưu cấu hình
 
-Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên (Sensor + MQTT + OSC + Confirm Time + Admin Auth) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Trình duyệt sẽ hỏi username/password (xem mục 0) trước khi thực hiện. Sau khi Save, trang sẽ hiện thông báo:
+Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên **cả 2 tab** (Sensor + MQTT + OSC + Confirm Time + Admin Auth + Mạng/Ethernet) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Trình duyệt sẽ hỏi username/password (xem mục 0) trước khi thực hiện. Sau khi Save, trang sẽ hiện thông báo:
 - **"Saved OK"** — mọi trường lưu thành công.
 - **"Saved with N error(s) - check Serial log"** hoặc **"Save FAILED - NVS not accessible, check Serial log"** — có trường không lưu được, cần xem log Serial (kỹ thuật viên) để biết nguyên nhân.
-- Kèm thêm ghi chú field cụ thể bị từ chối nếu có, ví dụ `(OSC address rejected: must start with /)`, `(MQTT port rejected: must be 1-65535)`, `(sensor min/max rejected: min must be <= max)`.
+- Kèm thêm ghi chú field cụ thể bị từ chối nếu có, ví dụ `(OSC address rejected: must start with /)`, `(MQTT port rejected: must be 1-65535)`, `(sensor min/max rejected: min must be <= max)`, `(Ethernet static IP/gateway/netmask rejected: must be a valid IPv4 address)`.
 
 Sau khi hiện thông báo, trang tự tải lại.
 
@@ -149,5 +167,6 @@ Sau khi bấm Test, ô trạng thái realtime sẽ phản ánh đúng là đã "
 | Trạng thái không đổi dù có người | Kiểm tra sensor đó có đang **bật (enable)** không, và khoảng cách đo được (ô trạng thái realtime) có nằm trong MIN/MAX đã cấu hình không. |
 | Thấy badge cam **"[!] NO SENSORS ENABLED"** | Không phải lỗi mạng/sensor — nghĩa là **tất cả** sensor đang tắt (uncheck) trong panel Sensor Configuration. Bật lại ít nhất 1 sensor. |
 | MQTT hiện `DISCONNECTED` | Kiểm tra IP/Port/Username/Password broker, và broker có đang chạy/cho phép kết nối từ thiết bị không. |
-| Save báo lỗi ("rejected"/"error(s)") thay vì "Saved OK" | Đọc kỹ ghi chú field bị từ chối trong thông báo (OSC address thiếu `/`, port ngoài khoảng 1-65535, MIN > MAX) — sửa đúng field đó rồi Save lại; các field khác đã lưu vẫn giữ nguyên. |
+| Save báo lỗi ("rejected"/"error(s)") thay vì "Saved OK" | Đọc kỹ ghi chú field bị từ chối trong thông báo (OSC address thiếu `/`, port ngoài khoảng 1-65535, MIN > MAX, IP/Gateway/Netmask sai định dạng) — sửa đúng field đó rồi Save lại; các field khác đã lưu vẫn giữ nguyên. |
+| Đổi IP tĩnh dự phòng (tab Mạng/Ethernet) xong nhưng không thấy gì thay đổi | Bình thường nếu mạng vẫn có DHCP hoạt động — 3 giá trị này chỉ áp dụng khi DHCP thất bại lúc boot, xem mục 5c. |
 | Đổi 1 field rồi Save, field khác bị mất giá trị | Không nên xảy ra (Save ghi toàn bộ form) — nếu gặp, báo lại kèm field cụ thể để kiểm tra code. |

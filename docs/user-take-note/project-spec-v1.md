@@ -88,6 +88,9 @@ MQTT          Web UI
   DHCP server) → tự áp **IP tĩnh dự phòng `192.168.99.199`** (gateway `192.168.99.1`, mask
   `255.255.255.0`) thay vì để thiết bị không có IP vĩnh viễn — xem
   `docs/user-guide/web-ui-guide.md` mục 1 cho hướng dẫn truy cập bằng IP này.
+* **(Mới, 2026-08-02)** 3 giá trị IP tĩnh dự phòng trên giờ sửa được qua Web UI, tab **"Mạng
+  (Ethernet)"** riêng (trước đó chỉ sửa được qua NVS trực tiếp) — xem
+  `docs/user-guide/web-ui-guide.md` mục 5c.
 
 ## MQTT
 
