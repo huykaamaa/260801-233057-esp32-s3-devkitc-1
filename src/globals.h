@@ -76,6 +76,17 @@ extern char oscAddressMissing[64];
 extern int oscValueFull;
 extern int oscValueMissing;
 
+// --- HTTP Basic Auth for state-changing endpoints (F6) -----------------------------------
+// /save, /test_mqtt, /test_osc accept unauthenticated POSTs from anyone on the LAN (or any
+// page an operator has open in another tab). Gated with WebServer::authenticate()/
+// requestAuthentication(). Root GET "/" and polling GET "/data" stay open on purpose - they
+// only ever read/render state, and gating them would break the auto-refreshing dashboard.
+// Default credentials are logged plainly at boot (see setup()) so a fresh device is never
+// silently locked out or silently left on an unannounced default; change them via the Web UI
+// "Admin Auth" panel same as any other saved field.
+extern char authUser[32];
+extern char authPass[32];
+
 #define DEVICE_NUM 3
 #define RS485_TIMEOUT 5000
 

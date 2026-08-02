@@ -2,6 +2,30 @@
 #include "html.h"
 #include <Arduino.h>
 
+// F7: escape operator-controlled config values before interpolating them into an HTML
+// attribute value. Centralized here (single call site edited if the escape set ever needs
+// to change) instead of inlined at each of the 9 interpolation points below - a bare
+// apostrophe typed into e.g. mqttServer would otherwise break out of the surrounding
+// value='...' attribute and corrupt the rendered form. Order matters: '&' must be escaped
+// first so it doesn't double-escape the entities produced for the other four characters.
+static String htmlEscape(const String& s)
+{
+  String out;
+  out.reserve(s.length());
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    switch (c) {
+      case '&':  out += "&amp;";  break;
+      case '<':  out += "&lt;";   break;
+      case '>':  out += "&gt;";   break;
+      case '"':  out += "&quot;"; break;
+      case '\'': out += "&#39;";  break;
+      default:   out += c;        break;
+    }
+  }
+  return out;
+}
+
 void handleRoot()
 {
   String html;
@@ -96,7 +120,7 @@ void handleRoot()
   html += "<div class='single'>";
   html += "<label>MQTT IP</label>";
   html += "<input name='mqtt_ip' value='";
-  html += mqttServer;
+  html += htmlEscape(mqttServer);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
@@ -108,31 +132,31 @@ void handleRoot()
   html += "<div class='single'>";
   html += "<label>Username</label>";
   html += "<input name='mqtt_user' value='";
-  html += mqttUser;
+  html += htmlEscape(mqttUser);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
   html += "<label>Password</label>";
   html += "<input type='password' name='mqtt_pass' value='";
-  html += mqttPass;
+  html += htmlEscape(mqttPass);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
   html += "<label>MQTT Topic</label>";
   html += "<input name='mqtt_topic' value='";
-  html += mqttTopic;
+  html += htmlEscape(mqttTopic);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
   html += "<label>FULL Message</label>";
   html += "<input name='mqtt_full' value='";
-  html += mqttFullValue;
+  html += htmlEscape(mqttFullValue);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
   html += "<label>MISSING Message</label>";
   html += "<input name='mqtt_missing' value='";
-  html += mqttMissingValue;
+  html += htmlEscape(mqttMissingValue);
   html += "'>";
   html += "</div>";
   html += "</div>";
@@ -146,7 +170,7 @@ void handleRoot()
   html += "<div class='single'>";
   html += "<label>OSC IP</label>";
   html += "<input name='osc_ip' value='";
-  html += oscIp;
+  html += htmlEscape(oscIp);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
@@ -158,7 +182,7 @@ void handleRoot()
   html += "<div class='single'>";
   html += "<label>FULL Address</label>";
   html += "<input name='osc_address_full' value='";
-  html += oscAddressFull;
+  html += htmlEscape(oscAddressFull);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
@@ -170,7 +194,7 @@ void handleRoot()
   html += "<div class='single'>";
   html += "<label>MISSING Address</label>";
   html += "<input name='osc_address_missing' value='";
-  html += oscAddressMissing;
+  html += htmlEscape(oscAddressMissing);
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
@@ -189,6 +213,20 @@ void handleRoot()
   html += confirmTime;
   html += "'>";
   html += "</div>";
+  html += "</div>";
+  html += "<div class='panel'>";
+  html += "<h3>Admin Auth</h3>";
+  html += "<div class='single'>";
+  html += "<label>Username</label>";
+  html += "<input name='auth_user' value='";
+  html += htmlEscape(authUser);
+  html += "'>";
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label>Password (leave blank to keep current)</label>";
+  html += "<input type='password' name='auth_pass' value=''>";
+  html += "</div>";
+  html += "<div class='note'>Required (HTTP Basic Auth) to Save Settings or use the Test buttons below. Change from the shipped default as soon as possible (F6).</div>";
   html += "</div>";
   html += "<input class='btn' type='submit' value='SAVE SETTINGS'>";
   html += "</form>";

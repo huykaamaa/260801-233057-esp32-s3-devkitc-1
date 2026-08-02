@@ -39,6 +39,9 @@ char oscAddressMissing[64] = "/composition/layers/1/clips/1/connect";
 int oscValueFull = 1;
 int oscValueMissing = 0;
 
+char authUser[32] = "admin";  // Web UI Basic Auth username (F6) - change via Admin Auth panel
+char authPass[32] = "admin";  // Web UI Basic Auth password (F6) - change via Admin Auth panel
+
 int rsDistance[DEVICE_NUM];         // Khoảng cách hiện tại của mỗi sensor
 unsigned long lastRS485[DEVICE_NUM]; // Thời điểm nhận dữ liệu cuối từ sensor
 bool sensorEnabled[DEVICE_NUM] = {true, true, true};
@@ -142,7 +145,21 @@ void setup()
     oscValueMissing = prefs.getInt(NVS_KEY("osc_value_miss"), 0);
 
     confirmTime = prefs.getULong(NVS_KEY("confirm"), 1000);
+
+    strncpy(authUser, prefs.getString(NVS_KEY("auth_user"), "admin").c_str(), sizeof(authUser) - 1);
+    authUser[sizeof(authUser) - 1] = '\0';
+    strncpy(authPass, prefs.getString(NVS_KEY("auth_pass"), "admin").c_str(), sizeof(authPass) - 1);
+    authPass[sizeof(authPass) - 1] = '\0';
+
     prefs.end();
+  }
+
+  // F6: a fresh/unconfigured device is otherwise silently insecure with nobody ever told -
+  // log this plainly and unconditionally at every boot while defaults are still in effect,
+  // so an operator watching Serial sees it without having to go looking.
+  if (strcmp(authUser, "admin") == 0 && strcmp(authPass, "admin") == 0) {
+    LOG("AUTH: using default admin credentials (admin/admin) for /save, /test_mqtt, /test_osc - "
+        "change via Web UI 'Admin Auth' panel");
   }
 
   WiFi.onEvent(WiFiEvent);
@@ -361,6 +378,8 @@ int saveDistanceConfig()
   checkFixed(prefs.putInt(NVS_KEY("osc_value_full"), oscValueFull), "osc_value_full");
   checkFixed(prefs.putInt(NVS_KEY("osc_value_miss"), oscValueMissing), "osc_value_miss");
   checkFixed(prefs.putULong(NVS_KEY("confirm"), confirmTime), "confirm");
+  checkStr(prefs.putString(NVS_KEY("auth_user"), authUser), authUser, "auth_user");
+  checkStr(prefs.putString(NVS_KEY("auth_pass"), authPass), authPass, "auth_pass");
   checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
 
   prefs.end();
