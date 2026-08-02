@@ -84,6 +84,7 @@ extern unsigned long lastRS485[DEVICE_NUM];
 extern bool sensorEnabled[DEVICE_NUM];
 extern bool lastState;
 extern bool actionDone;
+extern bool publishedState;          // Trạng thái đã thực sự publish (MQTT/OSC) lần gần nhất
 extern unsigned long stateTimer;
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];

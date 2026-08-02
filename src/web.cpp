@@ -196,9 +196,23 @@ void handleSave() {
   );
 }
 
+// Test buttons fire a real FULL cue on purpose (for testing MQTT/OSC wiring), but must also
+// update the state machine's bookkeeping (lastState/actionDone/publishedState) to reflect that
+// FULL was just (test-)published - otherwise checkDistance() keeps believing the previous
+// steady-state cue is still the "already published" one and will never re-fire a real
+// triggerMissing()/triggerFull() until an unrelated raw transition happens, permanently
+// desyncing the receiver from the actual sensor state (new finding 4.6).
+static void syncStateMachineAfterTestTrigger() {
+  lastState = true;
+  publishedState = true;
+  actionDone = true;
+  stateTimer = millis();
+}
+
 void handleTestMQTT() {
   LOG(">>> TEST MQTT <<<");
   triggerFull();
+  syncStateMachineAfterTestTrigger();
   server.send(
     200,
     "text/html",
@@ -211,6 +225,7 @@ void handleTestMQTT() {
 void handleTestOSC() {
   LOG(">>> TEST OSC <<<");
   triggerFull();
+  syncStateMachineAfterTestTrigger();
   server.send(
     200,
     "text/html",

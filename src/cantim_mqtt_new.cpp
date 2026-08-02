@@ -44,8 +44,9 @@ unsigned long lastRS485[DEVICE_NUM]; // Thời điểm nhận dữ liệu cuối
 bool sensorEnabled[DEVICE_NUM] = {true, true, true};
 int distanceMin[DEVICE_NUM] = {200, 200, 200}; // Ngưỡng min của mỗi sensor
 int distanceMax[DEVICE_NUM] = {800, 800, 800}; // Ngưỡng max của mỗi sensor
-bool lastState = false;             // Trạng thái đầy/vắng trước đó
-bool actionDone = false;            // Đã gửi hành động MQTT chưa
+bool lastState = false;             // Trạng thái đầy/vắng trước đó (raw, dùng để debounce)
+bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho lastState hiện tại)
+bool publishedState = false;        // Trạng thái đã thực sự trigger/publish lần gần nhất (khác lastState!)
 unsigned long stateTimer = 0;        // Thời gian bắt đầu xác nhận trạng thái
 unsigned long confirmTime = 500;     // ms đợi xác nhận thay đổi trạng thái
 bool eth_connected = false;         // Trạng thái kết nối Ethernet
@@ -269,6 +270,7 @@ void checkDistance()
       lastState = currentState;
       stateTimer = millis();
       actionDone = true;
+      publishedState = currentState;  // ghi nhận đây là trạng thái vừa thực sự publish
 
       if (currentState) {
         LOG("FULL");
@@ -289,12 +291,18 @@ void checkDistance()
 
   if (millis() - stateTimer >= confirmTime) {
     if (!actionDone) {
-      if (currentState) {
-        LOG("FULL");
-        triggerFull();
-      } else {
-        LOG("MISSING");
-        triggerMissing();
+      // Chỉ publish nếu trạng thái đã xác nhận (currentState) khác trạng thái đã publish
+      // lần gần nhất - tránh trường hợp raw signal rung (jitter) làm lastState/actionDone
+      // "quên" là trạng thái này đã được publish rồi, dẫn tới bắn lại đúng cue cũ nhiều lần.
+      if (currentState != publishedState) {
+        if (currentState) {
+          LOG("FULL");
+          triggerFull();
+        } else {
+          LOG("MISSING");
+          triggerMissing();
+        }
+        publishedState = currentState;
       }
       actionDone = true;
     }
