@@ -42,7 +42,7 @@ git worktree list                                     # xác nhận đã tách
   khác đang chạy, dễ cuốn theo file của họ.
 - Chỉ commit file session mình tạo/sửa.
 
-## Build — project này KHÔNG cần lock
+## Build — project này KHÔNG cần lock (cho tới khi có dấu hiệu ngược lại)
 
 Khác với DMX003 (đã hard-code `build_dir` dùng chung ngoài repo → phải có
 `pio_wt.ps1` cấp phát build dir riêng mỗi worktree để tránh clobber), project này
@@ -51,6 +51,27 @@ build dir tại `.pio/build/` NGAY TRONG mỗi checkout/worktree. Hai worktree k
 thư mục = hai `.pio/` khác nhau = build song song tự nhiên AN TOÀN, không cần
 wrapper. Chỉ 2 session cùng build TRONG CÙNG một thư mục mới cạnh tranh — tránh
 bằng cách không chạy `pio run` chồng lệnh nhau trong cùng 1 checkout.
+
+Đã có sẵn quy ước hiện tại (2026-08-02): chỉ dùng **1 worktree duy nhất** cho cả
+chuỗi audit/fix (không phải 1 worktree/agent) — nên câu hỏi "N worktree build
+song song có đụng cache không" hiện chưa phát sinh. `tools/clean_build.ps1` xoá
+`.pio/build`+`.pio/libdeps` của 1 checkout, dùng sau commit lớn hoặc trước khi
+merge/xoá worktree, để tránh object file cũ lẫn vào lần build tiếp theo (không
+phải "lock" — chỉ dọn rác định kỳ trong vòng đời 1 worktree).
+
+**Tripwire — khi nào cần triển khai isolated build dir thật (kiểu `pio_wt.ps1`
+của DMX003):**
+- Quay lại mô hình nhiều worktree chạy `pio run`/`pio test` THẬT SỰ song song
+  (nhiều agent cùng lúc, không tuần tự), VÀ
+- Gặp 1 trong các triệu chứng: build lỗi link/object khó hiểu chỉ xảy ra khi 2
+  worktree build cùng lúc rồi hết khi build lại 1 mình; `.sconsign*.dblite` báo
+  mismatch; file `.pio/build/**/*.o` bị ghi đè bởi checkout khác (kiểm tra bằng
+  mtime nhảy ngược khi không ai vừa sửa source đó).
+
+Nếu gặp đúng 2 điều kiện trên → đề xuất (hoặc tự triển khai nếu user đã cho phép
+trước) override `build_dir` ra 1 thư mục ngoài repo, đặt tên theo worktree/session
+(vd `~/pio_build/cantim_<worktree-name>`), tương tự cơ chế `pio_wt.ps1` của
+DMX003 — không port sẵn vì hiện tại chưa cần, tránh thêm phức tạp không dùng tới.
 
 ## Flash / Monitor cùng COM port — PHẢI claim
 
