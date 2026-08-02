@@ -5,6 +5,32 @@
 #include <Arduino.h>
 #include <cstring>
 
+// F6: gate state-changing endpoints (/save, /test_mqtt, /test_osc) behind HTTP Basic Auth.
+// Returns false (and already sent a 401) if the caller is not authenticated - callers must
+// return immediately without doing any work when this returns false. Root GET "/" and
+// polling GET "/data" deliberately do NOT call this (see globals.h comment on authUser).
+static bool requireAuth() {
+  if (!server.authenticate(authUser, authPass)) {
+    server.requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
+// F16: parses `s` as an integer and accepts it only if it falls within [minVal, maxVal].
+// String::toInt() returns 0 for non-numeric input ("abc") and silently overflows/truncates
+// when the result is later stored into a fixed-width type (e.g. "65537" -> uint16_t 1) - doing
+// the range check on the full `long` result before any narrowing assignment closes both holes
+// in one place instead of re-deriving it at each call site.
+static bool parseValidatedLong(const String& s, long minVal, long maxVal, long& out) {
+  long v = s.toInt();
+  if (v < minVal || v > maxVal) {
+    return false;
+  }
+  out = v;
+  return true;
+}
+
 void handleData() {
   String data;
   data += "<b>MQTT:</b> ";
@@ -20,8 +46,22 @@ void handleData() {
           "<span style='color:gray'>DISABLED</span>";
   data += "<br><br>";
 
+  // F17: requiredCount==0 (every sensor disabled) hard-locks checkDistance()'s currentState at
+  // MISSING - that is a real "device not configured" state, not "actually empty", and an
+  // operator needs to be able to tell the two apart at a glance instead of seeing the same red
+  // MISSING badge either way.
+  bool anySensorEnabled = false;
+  for (int i = 0; i < DEVICE_NUM; i++) {
+    if (sensorEnabled[i]) {
+      anySensorEnabled = true;
+      break;
+    }
+  }
+
   data += "<b>STATUS:</b> ";
-  if (lastState) {
+  if (!anySensorEnabled) {
+    data += "<span style='color:orange;font-size:20px'><b>[!] NO SENSORS ENABLED</b></span>";
+  } else if (lastState) {
     data += "<span style='color:green;font-size:20px'><b>✅ FULL</b></span>";
   } else {
     data += "<span style='color:red;font-size:20px'><b>❌ MISSING</b></span>";
@@ -45,12 +85,26 @@ void handleData() {
 }
 
 void handleSave() {
+  if (!requireAuth()) {  // F6
+    return;
+  }
+
+  // F16: validate distanceMin[i] <= distanceMax[i] per sensor before accepting either half -
+  // reading both first (falling back to the current live value for whichever field wasn't
+  // submitted) means a bad pair is rejected as a pair instead of partially applied.
+  bool sensorRangeInvalid = false;
   for (int i = 0; i < DEVICE_NUM; i++) {
-    if (server.hasArg("min" + String(i))) {
-      distanceMin[i] = server.arg("min" + String(i)).toInt();
-    }
-    if (server.hasArg("max" + String(i))) {
-      distanceMax[i] = server.arg("max" + String(i)).toInt();
+    bool haveMin = server.hasArg("min" + String(i));
+    bool haveMax = server.hasArg("max" + String(i));
+    int newMin = haveMin ? server.arg("min" + String(i)).toInt() : distanceMin[i];
+    int newMax = haveMax ? server.arg("max" + String(i)).toInt() : distanceMax[i];
+    if (haveMin || haveMax) {
+      if (newMin <= newMax) {
+        distanceMin[i] = newMin;
+        distanceMax[i] = newMax;
+      } else {
+        sensorRangeInvalid = true;
+      }
     }
     sensorEnabled[i] = server.hasArg("sensor" + String(i));
   }
@@ -63,9 +117,17 @@ void handleSave() {
     needRestartMQTT = true;
   }
 
+  // F16: reject out of range/non-numeric mqtt_port instead of silently truncating
+  // ("65537" -> uint16_t 1) or accepting toInt()'s 0-for-garbage as a real port.
+  bool mqttPortInvalid = false;
   if (server.hasArg("mqtt_port")) {
-    mqttPort = server.arg("mqtt_port").toInt();
-    needRestartMQTT = true;
+    long v;
+    if (parseValidatedLong(server.arg("mqtt_port"), 1, 65535, v)) {
+      mqttPort = (uint16_t)v;
+      needRestartMQTT = true;
+    } else {
+      mqttPortInvalid = true;
+    }
   }
 
   if (server.hasArg("mqtt_user")) {
@@ -107,29 +169,46 @@ void handleSave() {
     oscEnabled = false;
   }
 
-  if (server.hasArg("messenger_enable")) {
-    messengerEnabled = true;
-  } else {
-    messengerEnabled = false;
-  }
-
   if (server.hasArg("osc_ip")) {
     strncpy(oscIp, server.arg("osc_ip").c_str(), sizeof(oscIp) - 1);
     oscIp[sizeof(oscIp) - 1] = '\0';
   }
 
+  // F16: same range validation as mqtt_port above.
+  bool oscPortInvalid = false;
   if (server.hasArg("osc_port")) {
-    oscPort = server.arg("osc_port").toInt();
+    long v;
+    if (parseValidatedLong(server.arg("osc_port"), 1, 65535, v)) {
+      oscPort = (uint16_t)v;
+    } else {
+      oscPortInvalid = true;
+    }
   }
 
+  // 4.9: OSC 1.0 requires an address pattern to start with '/'. Reject (do
+  // not persist) an address missing the leading slash instead of silently
+  // saving/transmitting something a conformant receiver will drop - the
+  // operator gets a clear signal in the Save response below.
+  bool oscAddressInvalid = false;
+
   if (server.hasArg("osc_address_full")) {
-    strncpy(oscAddressFull, server.arg("osc_address_full").c_str(), sizeof(oscAddressFull) - 1);
-    oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
+    String v = server.arg("osc_address_full");
+    if (v.length() > 0 && v[0] != '/') {
+      oscAddressInvalid = true;
+    } else {
+      strncpy(oscAddressFull, v.c_str(), sizeof(oscAddressFull) - 1);
+      oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
+    }
   }
 
   if (server.hasArg("osc_address_missing")) {
-    strncpy(oscAddressMissing, server.arg("osc_address_missing").c_str(), sizeof(oscAddressMissing) - 1);
-    oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
+    String v = server.arg("osc_address_missing");
+    if (v.length() > 0 && v[0] != '/') {
+      oscAddressInvalid = true;
+    } else {
+      strncpy(oscAddressMissing, v.c_str(), sizeof(oscAddressMissing) - 1);
+      oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
+    }
   }
 
   if (server.hasArg("osc_value_full")) {
@@ -140,34 +219,104 @@ void handleSave() {
     oscValueMissing = server.arg("osc_value_missing").toInt();
   }
 
+  // F15: clamp instead of reject - "-1" fed through String::toInt() into an unsigned long
+  // used to wrap to 4294967295 (~49.7 days), silently disabling all FULL/MISSING triggering
+  // (see checkDistance()'s startupWaiting confirm-time compare). Clamping the signed toInt()
+  // result BEFORE it is ever assigned to the unsigned confirmTime prevents the wrap entirely.
   if (server.hasArg("confirm")) {
-    confirmTime = server.arg("confirm").toInt();
+    long v = server.arg("confirm").toInt();
+    if (v < 50) {
+      v = 50;
+    } else if (v > 60000) {
+      v = 60000;
+    }
+    confirmTime = (unsigned long)v;
   }
 
-  saveDistanceConfig();
+  if (server.hasArg("auth_user") && server.arg("auth_user").length() > 0) {
+    strncpy(authUser, server.arg("auth_user").c_str(), sizeof(authUser) - 1);
+    authUser[sizeof(authUser) - 1] = '\0';
+  }
+
+  if (server.hasArg("auth_pass") && server.arg("auth_pass").length() > 0) {
+    strncpy(authPass, server.arg("auth_pass").c_str(), sizeof(authPass) - 1);
+    authPass[sizeof(authPass) - 1] = '\0';
+  }
+
+  int saveFailCount = saveDistanceConfig();
 
   if (needRestartMQTT) {
     if (mqtt) {
       esp_mqtt_client_stop(mqtt);
       esp_mqtt_client_destroy(mqtt);
       mqtt = NULL;
+      // 4.8: esp_mqtt_client_stop()/destroy() are app-initiated and never
+      // route through mqttEvent() (MQTT_EVENT_DISCONNECTED only fires for
+      // network-initiated disconnects), so mqttConnected would otherwise
+      // stay stuck at its pre-destroy value and the Web UI status line
+      // would keep showing "CONNECTED" even after a bad broker save.
+      mqttConnected = false;
     }
     mqttInit();
+  }
+
+  // Only claim success when saveDistanceConfig() actually wrote everything - see F2:
+  // this used to unconditionally say "Saved OK" even when NVS writes silently failed.
+  String alertMsg;
+  if (saveFailCount == 0) {
+    alertMsg = "Saved OK";
+  } else if (saveFailCount < 0) {
+    alertMsg = "Save FAILED - NVS not accessible, check Serial log";
+  } else {
+    alertMsg = "Saved with " + String(saveFailCount) + " error(s) - check Serial log";
+  }
+
+  if (oscAddressInvalid) {
+    alertMsg += " (OSC address rejected: must start with /)";
+  }
+
+  if (mqttPortInvalid) {
+    alertMsg += " (MQTT port rejected: must be 1-65535)";
+  }
+
+  if (oscPortInvalid) {
+    alertMsg += " (OSC port rejected: must be 1-65535)";
+  }
+
+  if (sensorRangeInvalid) {
+    alertMsg += " (sensor min/max rejected: min must be <= max)";
   }
 
   server.send(
     200,
     "text/html",
     "<script>"
-    "alert('Saved OK');"
+    "alert('" + alertMsg + "');"
     "window.location.href='/';"
     "</script>"
   );
 }
 
+// Test buttons fire a real FULL cue on purpose (for testing MQTT/OSC wiring), but must also
+// update the state machine's bookkeeping (lastState/actionDone/publishedState) to reflect that
+// FULL was just (test-)published - otherwise checkDistance() keeps believing the previous
+// steady-state cue is still the "already published" one and will never re-fire a real
+// triggerMissing()/triggerFull() until an unrelated raw transition happens, permanently
+// desyncing the receiver from the actual sensor state (new finding 4.6).
+static void syncStateMachineAfterTestTrigger() {
+  lastState = true;
+  publishedState = true;
+  actionDone = true;
+  stateTimer = millis();
+}
+
 void handleTestMQTT() {
+  if (!requireAuth()) {  // F6
+    return;
+  }
   LOG(">>> TEST MQTT <<<");
   triggerFull();
+  syncStateMachineAfterTestTrigger();
   server.send(
     200,
     "text/html",
@@ -178,8 +327,12 @@ void handleTestMQTT() {
 }
 
 void handleTestOSC() {
+  if (!requireAuth()) {  // F6
+    return;
+  }
   LOG(">>> TEST OSC <<<");
   triggerFull();
+  syncStateMachineAfterTestTrigger();
   server.send(
     200,
     "text/html",

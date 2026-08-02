@@ -5,7 +5,11 @@
 static void writeOscString(WiFiUDP &udp, const char *text) {
   size_t len = strlen(text);
   udp.write(reinterpret_cast<const uint8_t*>(text), len);
-  size_t padding = (4 - (len % 4)) % 4;
+  // OSC 1.0 requires the string to be NUL-terminated then zero-padded to a
+  // 4-byte boundary - at least 1 pad byte always, even when len is already
+  // a multiple of 4 (F10: "% 4" outer wrap previously produced 0 padding
+  // for such lengths, which dropped the terminator entirely).
+  size_t padding = 4 - (len % 4);
   for (size_t i = 0; i < padding; ++i) {
     udp.write((uint8_t)0);
   }
@@ -16,14 +20,33 @@ static void sendOscValue(const char *address, int value) {
     return;
   }
 
+  bool hasAddress = (address != nullptr) && (strlen(address) > 0);
+  // 4.9: OSC 1.0 address patterns must start with '/'. Primary validation
+  // (with operator feedback) happens at Save time in web.cpp handleSave();
+  // this is a cheap defensive last line of defense against any other caller.
+  if (hasAddress && address[0] != '/') {
+    return;
+  }
+
   if (!oscUdp.beginPacket(oscIp, oscPort)) {
     return;
   }
 
-  const char *osc_address = (strlen(address) > 0) ? address : "/sensor/state";
+  const char *osc_address = hasAddress ? address : "/sensor/state";
   writeOscString(oscUdp, osc_address);
   writeOscString(oscUdp, ",i");
-  oscUdp.write(reinterpret_cast<const uint8_t*>(&value), sizeof(value));
+
+  // F9: OSC 1.0 requires int32 arguments in big-endian ("network byte
+  // order"). The native int is little-endian on ESP32, so byte-swap
+  // manually before writing (avoids relying on htonl() include ordering).
+  uint32_t be = static_cast<uint32_t>(value);
+  uint8_t bytes[4] = {
+    static_cast<uint8_t>(be >> 24),
+    static_cast<uint8_t>(be >> 16),
+    static_cast<uint8_t>(be >> 8),
+    static_cast<uint8_t>(be)
+  };
+  oscUdp.write(bytes, sizeof(bytes));
   oscUdp.endPacket();
 }
 
@@ -63,8 +86,19 @@ void mqttInit() {
 void triggerFull() {
   LOG(">>> FULL 3 PEOPLE <<<");
   if (mqttEnabled) {
-    if (mqtt) {
-      esp_mqtt_client_publish(mqtt, mqttTopic, mqttFullValue, 0, 0, 0);
+    if (mqtt && mqttConnected) {
+      // F14/4.2: esp_mqtt_client_publish() blocks on the esp-mqtt internal
+      // api_lock with an INFINITE wait, which can stall loop() for seconds
+      // during a half-open/reconnecting broker state. esp_mqtt_client_enqueue()
+      // queues the message and returns without waiting on that lock; store=true
+      // so the QoS-0 payload is still enqueued (by default only QoS 1/2 are).
+      esp_mqtt_client_enqueue(mqtt, mqttTopic, mqttFullValue, 0, 0, 0, true);
+    } else if (mqtt) {
+      // F3: client handle exists but MQTT_EVENT_CONNECTED hasn't fired (or a
+      // disconnect already did) - publishing here would either silently drop
+      // the message (esp-mqtt returns -1 for QoS-0 publish while disconnected)
+      // or block on api_lock, so skip and log instead of pretending it sent.
+      LOG("MQTT publish skipped: not connected");
     } else {
       LOG("MQTT publish skipped: client not initialized");
     }
@@ -77,8 +111,13 @@ void triggerFull() {
 void triggerMissing() {
   LOG(">>> NOT ENOUGH PEOPLE <<<");
   if (mqttEnabled) {
-    if (mqtt) {
-      esp_mqtt_client_publish(mqtt, mqttTopic, mqttMissingValue, 0, 0, 0);
+    if (mqtt && mqttConnected) {
+      // See triggerFull() above for why enqueue() (non-blocking) is used
+      // instead of publish() (blocking on api_lock) - F14/4.2.
+      esp_mqtt_client_enqueue(mqtt, mqttTopic, mqttMissingValue, 0, 0, 0, true);
+    } else if (mqtt) {
+      // F3: guard against publishing while not connected - see triggerFull().
+      LOG("MQTT publish skipped: not connected");
     } else {
       LOG("MQTT publish skipped: client not initialized");
     }

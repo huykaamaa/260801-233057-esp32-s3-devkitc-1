@@ -71,6 +71,10 @@ MQTT          Web UI
  Preferences
 ```
 
+**(Mới, 2026-08-02)** `Web UI` → các route thay đổi trạng thái/cấu hình (`/save`,
+`/test_mqtt`, `/test_osc`) đi qua 1 bước **HTTP Basic Auth** trước khi chạm tới `Preferences`
+— xem mục Web Server bên dưới và F6 ở §8.
+
 ---
 
 # 4. Chức năng hiện có
@@ -78,8 +82,12 @@ MQTT          Web UI
 ## Ethernet
 
 * Khởi tạo W5500.
-* Chờ kết nối Ethernet.
+* Chờ kết nối Ethernet (DHCP, timeout `ETH_WAIT_MS = 10000`).
 * Có callback báo trạng thái mạng.
+* **(Mới, F19, 2026-08-02)** Nếu hết timeout mà vẫn chưa lấy được IP qua DHCP (mạng không có
+  DHCP server) → tự áp **IP tĩnh dự phòng `192.168.99.199`** (gateway `192.168.99.1`, mask
+  `255.255.255.0`) thay vì để thiết bị không có IP vĩnh viễn — xem
+  `docs/user-guide/web-ui-guide.md` mục 1 cho hướng dẫn truy cập bằng IP này.
 
 ## MQTT
 
@@ -90,10 +98,16 @@ MQTT          Web UI
 
 ## Web Server
 
+**(Mới, F6, 2026-08-02)** `/save`, `/test_mqtt`, `/test_osc` yêu cầu **HTTP Basic Auth**
+(username/password mặc định `admin`/`admin`, đổi được qua panel Admin Auth trên chính Web
+UI). Trang chủ `/` và endpoint polling `/data` (đọc trạng thái realtime) **không** yêu cầu
+đăng nhập. Đây là thay đổi kiến trúc user-visible: trước đây bất kỳ ai trên cùng mạng LAN
+đều POST được vào `/save` không cần xác thực.
+
 Cho phép cấu hình:
 
 * MQTT Server
-* MQTT Port
+* MQTT Port (validate 1-65535, F16)
 * MQTT Username
 * MQTT Password
 * MQTT Topic
@@ -101,19 +115,24 @@ Cho phép cấu hình:
 Thông số sensor:
 
 * Distance Min
-* Distance Max
+* Distance Max (validate Min <= Max, F16)
 
 OSC:
 
-* Address
-* Full Address
-* Value
-* Full Value
+* Full Address / Missing Address (validate bắt buộc bắt đầu bằng `/`, 4.9)
+* Full Value / Missing Value (int32, encode big-endian đúng chuẩn OSC 1.0, F9)
+* OSC Port (validate 1-65535, F16)
+
+Confirm Time (ms) — clamp vào khoảng [50, 60000] thay vì nhận nguyên giá trị nhập (F15).
+
+**(Mới, F6)** Admin Auth — username/password cho Basic Auth ở trên.
 
 Sau khi Save:
 
+* validate từng field, từ chối (không lưu) field không hợp lệ thay vì âm thầm sửa/tràn buffer
 * ghi Preferences
 * cập nhật biến runtime
+* phản hồi trung thực số lỗi ghi NVS thay vì luôn báo "Saved OK" (F2, xem Bug 1 bên dưới)
 
 ---
 
@@ -224,7 +243,7 @@ Firmware **không** hardcode MQTT username/password mặc định trong source c
 
 # 8. Các lỗi đã phát hiện
 
-## Bug 1
+## Bug 1 — ✅ FIXED (2026-08-02, F1/F29/F2/F4)
 
 OSC Full Address không được restore sau reboot.
 
@@ -241,7 +260,25 @@ Khả năng:
 * sai thứ tự load
 * buffer overwrite
 
-Cần audit.
+**Root cause xác nhận:** sai key Preferences — nhưng không phải "sai" theo nghĩa typo,
+mà là **quá dài**. NVS giới hạn tên key `NVS_KEY_NAME_MAX_SIZE=16` byte KỂ CẢ NUL =>
+15 ký tự dùng được. `"osc_address_full"` (16 ký tự), `"osc_address_missing"` (19),
+`"osc_value_missing"` (17) đều vượt giới hạn này — `Preferences::putString()`/`getString()`
+âm thầm trả về lỗi (không exception, không log), giống hệt "chưa từng lưu". `osc_value_full`
+(14 ký tự) vừa đủ nên sống sót — đúng khớp hiện tượng "Full Value còn, Full Address mất".
+
+Nguyên nhân kiến trúc sâu hơn (F29): key NVS dùng CHUNG literal với tên field HTML form
+(`server.hasArg(...)` trong web.cpp/html.cpp) — HTTP arg name không giới hạn độ dài, NVS
+key thì có. Đổi tên field "cho rõ nghĩa" vô tình phá NVS.
+
+**Fix:** đổi 3 key NVS thành `osc_addr_full`/`osc_addr_miss`/`osc_value_miss` (≤15 ký tự,
+TÁCH biệt khỏi tên field HTML/hasArg — không đổi tên field HTML). Thêm macro `NVS_KEY(...)`
+(template + `static_assert`) trong `globals.h`, bọc quanh MỌI literal key NVS hiện có để lớp
+bug này fail ở BUILD TIME thay vì âm thầm mất data ở field. Thêm `cfg_ver` (schema version,
+`CFG_VERSION` trong `globals.h`) — log cảnh báo ở boot nếu version cũ/thiếu, KHÔNG tự xoá NVS
+(xem `tools/full_erase.sh` nếu cần xoá tay). `saveDistanceConfig()` giờ trả về số lượng
+`put*()` thất bại (F2) thay vì `void`; `handleSave()` trong `web.cpp` phản hồi trung thực
+("Saved OK" chỉ khi thật sự OK) thay vì luôn báo "Saved OK".
 
 ---
 

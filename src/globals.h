@@ -11,6 +11,36 @@
 
 #define LOG(fmt, ...) do { Serial.printf(fmt "\r\n", ##__VA_ARGS__); } while(0)
 
+// --- NVS / Preferences key-length guard (F1, F29) ---------------------------------------
+// ESP32 NVS caps key names at NVS_KEY_NAME_MAX_SIZE = 16 bytes INCLUDING the NUL
+// terminator => 15 usable chars. Preferences::putX()/getX() do NOT surface this as a
+// compile or runtime error: putX() silently returns 0 (nvs_set_str/nvs_set_iX returns
+// ESP_ERR_NVS_KEY_TOO_LONG under the hood) and getX() silently returns the caller's
+// default. A key one character too long looks identical to "field was never saved" —
+// this is exactly what caused Bug 1 (OSC Full Address surviving reboot, Full Value not).
+//
+// Wrap every string LITERAL used as an NVS/Preferences key (or namespace) with
+// NVS_KEY(...) so an over-length key fails the BUILD instead of silently losing data
+// in the field. Keys built at runtime (e.g. "min" + String(i)) can't use this — keep
+// those short and bounded by construction (DEVICE_NUM is small, single-digit suffix).
+//
+// NVS keys are DELIBERATELY a separate namespace of names from the HTTP form field
+// names in html.cpp/web.cpp's server.hasArg(...) — HTTP arg names have no length limit,
+// NVS keys do. Renaming an HTTP field "for clarity" must never be copy-pasted into the
+// NVS key, and vice versa (root cause of F29).
+template <size_t N>
+constexpr const char* NVS_KEY(const char (&s)[N]) {
+  static_assert(N <= 16, "NVS key too long: max 15 chars + NUL (Preferences/NVS limit, see globals.h)");
+  return s;
+}
+
+// Bump whenever the NVS key layout (names/types) for the "distance" namespace changes.
+// See saveDistanceConfig()/setup() in cantim_mqtt_new.cpp for the boot-time check —
+// it only LOGS a warning, it never auto-wipes (device is unattended in the field;
+// silently discarding an operator's saved broker/OSC config would be worse than doing
+// nothing). To fully wipe NVS on purpose, use tools/full_erase.sh (not web-exposed).
+#define CFG_VERSION 1
+
 extern SPIClass spi;
 extern WebServer server;
 extern HardwareSerial RS485;
@@ -38,13 +68,23 @@ extern char mqttTopic[64];
 extern char mqttFullValue[32];
 extern char mqttMissingValue[32];
 extern bool oscEnabled;
-extern bool messengerEnabled;
 extern char oscIp[32];
 extern uint16_t oscPort;
 extern char oscAddressFull[64];
 extern char oscAddressMissing[64];
 extern int oscValueFull;
 extern int oscValueMissing;
+
+// --- HTTP Basic Auth for state-changing endpoints (F6) -----------------------------------
+// /save, /test_mqtt, /test_osc accept unauthenticated POSTs from anyone on the LAN (or any
+// page an operator has open in another tab). Gated with WebServer::authenticate()/
+// requestAuthentication(). Root GET "/" and polling GET "/data" stay open on purpose - they
+// only ever read/render state, and gating them would break the auto-refreshing dashboard.
+// Default credentials are logged plainly at boot (see setup()) so a fresh device is never
+// silently locked out or silently left on an unannounced default; change them via the Web UI
+// "Admin Auth" panel same as any other saved field.
+extern char authUser[32];
+extern char authPass[32];
 
 #define DEVICE_NUM 3
 #define RS485_TIMEOUT 5000
@@ -54,10 +94,26 @@ extern unsigned long lastRS485[DEVICE_NUM];
 extern bool sensorEnabled[DEVICE_NUM];
 extern bool lastState;
 extern bool actionDone;
+extern bool publishedState;          // Trạng thái đã thực sự publish (MQTT/OSC) lần gần nhất
 extern unsigned long stateTimer;
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;
 extern bool eth_connected;
 
-void saveDistanceConfig();
+// --- Ethernet static-IP fallback (F19) ---------------------------------------------------
+// If no DHCP server is reachable, lwIP's DHCP client retries forever and this build has no
+// CONFIG_LWIP_AUTOIP (no link-local self-assigned-IP fallback either) - the device would
+// otherwise NEVER get an IP, and loop() only services the Web UI's HTTP socket while
+// eth_connected is true, so the device becomes permanently unreachable with no way to
+// reconfigure/diagnose it remotely. setup() falls back to ETH.config(ethStaticIp, ...) once
+// the bounded DHCP wait (ETH_WAIT_MS) times out. NVS-backed (get in setup(), put in
+// saveDistanceConfig()) like every other field here, even though there is no Web UI panel to
+// edit them yet - that keeps the storage layer ready for one without another NVS migration.
+extern char ethStaticIp[16];
+extern char ethStaticGateway[16];
+extern char ethStaticNetmask[16];
+
+// Returns the number of failed put*() calls (0 = fully saved), or -1 if
+// prefs.begin() itself failed (namespace could not be opened, nothing was written).
+int saveDistanceConfig();
