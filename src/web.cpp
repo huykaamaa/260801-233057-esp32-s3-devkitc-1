@@ -167,6 +167,12 @@ void handleSave() {
       esp_mqtt_client_stop(mqtt);
       esp_mqtt_client_destroy(mqtt);
       mqtt = NULL;
+      // 4.8: esp_mqtt_client_stop()/destroy() are app-initiated and never
+      // route through mqttEvent() (MQTT_EVENT_DISCONNECTED only fires for
+      // network-initiated disconnects), so mqttConnected would otherwise
+      // stay stuck at its pre-destroy value and the Web UI status line
+      // would keep showing "CONNECTED" even after a bad broker save.
+      mqttConnected = false;
     }
     mqttInit();
   }

@@ -86,8 +86,19 @@ void mqttInit() {
 void triggerFull() {
   LOG(">>> FULL 3 PEOPLE <<<");
   if (mqttEnabled) {
-    if (mqtt) {
-      esp_mqtt_client_publish(mqtt, mqttTopic, mqttFullValue, 0, 0, 0);
+    if (mqtt && mqttConnected) {
+      // F14/4.2: esp_mqtt_client_publish() blocks on the esp-mqtt internal
+      // api_lock with an INFINITE wait, which can stall loop() for seconds
+      // during a half-open/reconnecting broker state. esp_mqtt_client_enqueue()
+      // queues the message and returns without waiting on that lock; store=true
+      // so the QoS-0 payload is still enqueued (by default only QoS 1/2 are).
+      esp_mqtt_client_enqueue(mqtt, mqttTopic, mqttFullValue, 0, 0, 0, true);
+    } else if (mqtt) {
+      // F3: client handle exists but MQTT_EVENT_CONNECTED hasn't fired (or a
+      // disconnect already did) - publishing here would either silently drop
+      // the message (esp-mqtt returns -1 for QoS-0 publish while disconnected)
+      // or block on api_lock, so skip and log instead of pretending it sent.
+      LOG("MQTT publish skipped: not connected");
     } else {
       LOG("MQTT publish skipped: client not initialized");
     }
@@ -100,8 +111,13 @@ void triggerFull() {
 void triggerMissing() {
   LOG(">>> NOT ENOUGH PEOPLE <<<");
   if (mqttEnabled) {
-    if (mqtt) {
-      esp_mqtt_client_publish(mqtt, mqttTopic, mqttMissingValue, 0, 0, 0);
+    if (mqtt && mqttConnected) {
+      // See triggerFull() above for why enqueue() (non-blocking) is used
+      // instead of publish() (blocking on api_lock) - F14/4.2.
+      esp_mqtt_client_enqueue(mqtt, mqttTopic, mqttMissingValue, 0, 0, 0, true);
+    } else if (mqtt) {
+      // F3: guard against publishing while not connected - see triggerFull().
+      LOG("MQTT publish skipped: not connected");
     } else {
       LOG("MQTT publish skipped: client not initialized");
     }
