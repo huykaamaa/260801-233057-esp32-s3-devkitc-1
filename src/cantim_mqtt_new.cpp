@@ -2,6 +2,7 @@
 #include "mqtt.h"
 #include "web.h"
 #include "html.h"
+#include "sensor_logic.h"
 #include <Arduino.h>
 #include <ETH.h>
 #include <SPI.h>
@@ -190,15 +191,13 @@ void readRS485()
         continue;
       }
 
-      int comma = data.indexOf(',');
-      if (comma <= 0) {
+      int id, distance;
+      if (!parseSensorLine(data.c_str(), id, distance)) {
         LOG("Loi: khong tim thay dau phay");
         continue;
       }
 
-      int id = data.substring(0, comma).toInt();
-      int distance = data.substring(comma + 1).toInt();
-      if (id >= 1 && id <= DEVICE_NUM) {
+      if (isValidDeviceId(id, DEVICE_NUM)) {
         rsDistance[id - 1] = distance;
         lastRS485[id - 1] = millis();
       } else {
@@ -235,7 +234,7 @@ void checkDistance()
       continue;
     }
     int d = rsDistance[i];
-    if (d >= distanceMin[i] && d <= distanceMax[i]) {
+    if (isDistanceInRange(d, distanceMin[i], distanceMax[i])) {
       countOK++;
     }
   }
