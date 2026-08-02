@@ -122,14 +122,30 @@ void handleSave() {
     oscPort = server.arg("osc_port").toInt();
   }
 
+  // 4.9: OSC 1.0 requires an address pattern to start with '/'. Reject (do
+  // not persist) an address missing the leading slash instead of silently
+  // saving/transmitting something a conformant receiver will drop - the
+  // operator gets a clear signal in the Save response below.
+  bool oscAddressInvalid = false;
+
   if (server.hasArg("osc_address_full")) {
-    strncpy(oscAddressFull, server.arg("osc_address_full").c_str(), sizeof(oscAddressFull) - 1);
-    oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
+    String v = server.arg("osc_address_full");
+    if (v.length() > 0 && v[0] != '/') {
+      oscAddressInvalid = true;
+    } else {
+      strncpy(oscAddressFull, v.c_str(), sizeof(oscAddressFull) - 1);
+      oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
+    }
   }
 
   if (server.hasArg("osc_address_missing")) {
-    strncpy(oscAddressMissing, server.arg("osc_address_missing").c_str(), sizeof(oscAddressMissing) - 1);
-    oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
+    String v = server.arg("osc_address_missing");
+    if (v.length() > 0 && v[0] != '/') {
+      oscAddressInvalid = true;
+    } else {
+      strncpy(oscAddressMissing, v.c_str(), sizeof(oscAddressMissing) - 1);
+      oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
+    }
   }
 
   if (server.hasArg("osc_value_full")) {
@@ -164,6 +180,10 @@ void handleSave() {
     alertMsg = "Save FAILED - NVS not accessible, check Serial log";
   } else {
     alertMsg = "Saved with " + String(saveFailCount) + " error(s) - check Serial log";
+  }
+
+  if (oscAddressInvalid) {
+    alertMsg += " (OSC address rejected: must start with /)";
   }
 
   server.send(
