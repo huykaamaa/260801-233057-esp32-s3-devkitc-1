@@ -40,7 +40,7 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 **Biến toàn cục (extern, định nghĩa thật trong `cantim_mqtt_new.cpp`):**
 - `mqtt`, `mqttConnected`, `mqttEnabled` — handle + trạng thái MQTT client.
 - `mqttServer/Port/User/Pass/Topic/FullValue/MissingValue` (`char[]` cố định, KHÔNG dùng `String` — mục 6 CLAUDE.md) — cấu hình MQTT publish, load/save qua Preferences.
-- `oscEnabled`, `messengerEnabled`, `oscIp`, `oscPort`, `oscAddressFull`, `oscAddressMissing`, `oscValueFull`, `oscValueMissing` — cấu hình OSC output khi FULL/MISSING.
+- `oscEnabled`, `oscIp`, `oscPort`, `oscAddressFull`, `oscAddressMissing`, `oscValueFull`, `oscValueMissing` — cấu hình OSC output khi FULL/MISSING.
 - `rsDistance[DEVICE_NUM]`, `lastRS485[DEVICE_NUM]` — khoảng cách hiện tại + timestamp lần nhận cuối của từng sensor.
 - `sensorEnabled[DEVICE_NUM]` — sensor nào được tính vào điều kiện FULL.
 - `distanceMin[DEVICE_NUM]`, `distanceMax[DEVICE_NUM]` — ngưỡng khoảng cách "có người" của từng sensor.

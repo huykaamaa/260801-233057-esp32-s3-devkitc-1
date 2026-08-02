@@ -169,12 +169,6 @@ void handleSave() {
     oscEnabled = false;
   }
 
-  if (server.hasArg("messenger_enable")) {
-    messengerEnabled = true;
-  } else {
-    messengerEnabled = false;
-  }
-
   if (server.hasArg("osc_ip")) {
     strncpy(oscIp, server.arg("osc_ip").c_str(), sizeof(oscIp) - 1);
     oscIp[sizeof(oscIp) - 1] = '\0';

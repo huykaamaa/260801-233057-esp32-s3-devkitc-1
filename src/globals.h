@@ -68,7 +68,6 @@ extern char mqttTopic[64];
 extern char mqttFullValue[32];
 extern char mqttMissingValue[32];
 extern bool oscEnabled;
-extern bool messengerEnabled;
 extern char oscIp[32];
 extern uint16_t oscPort;
 extern char oscAddressFull[64];

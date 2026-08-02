@@ -30,10 +30,8 @@ char mqttTopic[64] = "sensor/people"; // Topic MQTT publish
 char mqttFullValue[32] = "FULL";   // Payload MQTT khi đầy người
 char mqttMissingValue[32] = "MISSING"; // Payload MQTT khi vắng người
 bool oscEnabled = false;
-bool messengerEnabled = false;
 char oscIp[32] = "192.168.99.100";
 uint16_t oscPort = 9000;
-char oscAddress[64] = "/sensor/state";
 char oscAddressFull[64] = "/composition/layers/1/clips/1/connect";
 char oscAddressMissing[64] = "/composition/layers/1/clips/1/connect";
 int oscValueFull = 1;
@@ -138,7 +136,6 @@ void setup()
     mqttMissingValue[sizeof(mqttMissingValue) - 1] = '\0';
 
     oscEnabled = prefs.getBool(NVS_KEY("osc_en"), false);
-    messengerEnabled = prefs.getBool(NVS_KEY("messenger_en"), false);
     strncpy(oscIp, prefs.getString(NVS_KEY("osc_ip"), "192.168.99.100").c_str(), sizeof(oscIp) - 1);
     oscIp[sizeof(oscIp) - 1] = '\0';
     oscPort = prefs.getUShort(NVS_KEY("osc_port"), 9000);
@@ -424,7 +421,6 @@ int saveDistanceConfig()
   }
 
   checkFixed(prefs.putBool(NVS_KEY("osc_en"), oscEnabled), "osc_en");
-  checkFixed(prefs.putBool(NVS_KEY("messenger_en"), messengerEnabled), "messenger_en");
   checkStr(prefs.putString(NVS_KEY("osc_ip"), oscIp), oscIp, "osc_ip");
   checkFixed(prefs.putUShort(NVS_KEY("osc_port"), oscPort), "osc_port");
   checkStr(prefs.putString(NVS_KEY("osc_addr_full"), oscAddressFull), oscAddressFull, "osc_addr_full");
