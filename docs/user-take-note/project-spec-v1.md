@@ -197,6 +197,17 @@ update runtime variables
 
 ---
 
+## 6b. Bảo mật thông tin đăng nhập MQTT
+
+Firmware **không** hardcode MQTT username/password mặc định trong source code.
+
+* `mqttUser` / `mqttPass` khởi tạo rỗng (`""`) trong code.
+* Thông tin đăng nhập thật phải được nhập qua Web UI ở lần setup đầu tiên, sau đó được lưu vào Preferences (NVS) và dùng cho các lần boot sau.
+* Không commit credentials thật vào git dưới bất kỳ hình thức nào (kể cả làm giá trị mặc định trong `.cpp`).
+* Nếu broker đổi mật khẩu, chỉ cần cập nhật qua Web UI — không cần build lại firmware.
+
+---
+
 # 7. Hiện trạng
 
 Đang hoạt động:

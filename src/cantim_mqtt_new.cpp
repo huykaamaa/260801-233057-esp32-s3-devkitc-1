@@ -23,8 +23,8 @@ bool mqttEnabled = true;             // Cho phép gửi MQTT
 
 char mqttServer[32] = "192.168.99.225"; // Địa chỉ MQTT broker
 uint16_t mqttPort = 1883;            // Cổng MQTT broker
-char mqttUser[32] = "huykaamaa";   // Tên đăng nhập MQTT
-char mqttPass[32] = "6O6jNJip66@"; // Mật khẩu MQTT
+char mqttUser[32] = "";            // Tên đăng nhập MQTT (đặt qua Web UI, không hardcode)
+char mqttPass[32] = "";            // Mật khẩu MQTT (đặt qua Web UI, không hardcode)
 char mqttTopic[64] = "sensor/people"; // Topic MQTT publish
 char mqttFullValue[32] = "FULL";   // Payload MQTT khi đầy người
 char mqttMissingValue[32] = "MISSING"; // Payload MQTT khi vắng người
