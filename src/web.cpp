@@ -144,7 +144,7 @@ void handleSave() {
     confirmTime = server.arg("confirm").toInt();
   }
 
-  saveDistanceConfig();
+  int saveFailCount = saveDistanceConfig();
 
   if (needRestartMQTT) {
     if (mqtt) {
@@ -155,11 +155,22 @@ void handleSave() {
     mqttInit();
   }
 
+  // Only claim success when saveDistanceConfig() actually wrote everything - see F2:
+  // this used to unconditionally say "Saved OK" even when NVS writes silently failed.
+  String alertMsg;
+  if (saveFailCount == 0) {
+    alertMsg = "Saved OK";
+  } else if (saveFailCount < 0) {
+    alertMsg = "Save FAILED - NVS not accessible, check Serial log";
+  } else {
+    alertMsg = "Saved with " + String(saveFailCount) + " error(s) - check Serial log";
+  }
+
   server.send(
     200,
     "text/html",
     "<script>"
-    "alert('Saved OK');"
+    "alert('" + alertMsg + "');"
     "window.location.href='/';"
     "</script>"
   );

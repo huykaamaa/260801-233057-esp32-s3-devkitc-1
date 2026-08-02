@@ -24,12 +24,14 @@ Nguyên tắc tách file hiện tại (đã đúng theo mục 2 trong `CLAUDE.md
 
 ---
 
-## `src/globals.h` (63 dòng)
+## `src/globals.h` (95 dòng)
 
 Header trung tâm — mọi file khác include để dùng chung config/state runtime. Không có business logic, chỉ khai báo `extern` + hằng số pin/timeout.
 
 **Hằng số:**
 - `LOG(fmt, ...)` — macro wrapper `Serial.printf` (luôn bật, dùng cho log lỗi/trạng thái quan trọng theo mục 9 CLAUDE.md).
+- `NVS_KEY(s)` — template + `static_assert`, bọc quanh MỌI literal key NVS/Preferences để fail BUILD nếu key >15 ký tự (giới hạn `NVS_KEY_NAME_MAX_SIZE`). Thêm sau Bug 1 (F1/F29) — xem chú thích trong file để hiểu vì sao key NVS phải TÁCH khỏi tên field HTML.
+- `CFG_VERSION = 1` — schema version cho namespace Preferences `"distance"`, đối chiếu với key `cfg_ver` lúc boot (xem `setup()`/`saveDistanceConfig()` trong `cantim_mqtt_new.cpp`). Chỉ log cảnh báo, KHÔNG tự xoá NVS.
 - `ETH_CS/MOSI/MISO/SCK/INT/RST` — chân SPI cho W5500.
 - `RS485_RX/TX` — chân UART1 đọc dữ liệu sensor.
 - `DEVICE_NUM = 3` — số lượng sensor (3 cảm biến khoảng cách).
@@ -45,11 +47,11 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 - `lastState`, `actionDone`, `stateTimer`, `confirmTime` — máy trạng thái debounce (xem `checkDistance()` bên dưới).
 - `eth_connected` — cờ Ethernet đã có IP hay chưa.
 
-**Hàm:** `saveDistanceConfig()` — định nghĩa trong `cantim_mqtt_new.cpp`, ghi toàn bộ config trên vào Preferences (namespace `"distance"`).
+**Hàm:** `int saveDistanceConfig()` — định nghĩa trong `cantim_mqtt_new.cpp`, ghi toàn bộ config trên vào Preferences (namespace `"distance"`). Trả về số lượng `put*()` thất bại (0 = OK hết), hoặc `-1` nếu `prefs.begin()` thất bại (chưa ghi được gì) — đổi từ `void` sau F2 để `handleSave()` trong `web.cpp` biết thật sự đã lưu hay chưa.
 
 ---
 
-## `src/cantim_mqtt_new.cpp` (320 dòng) — entry point
+## `src/cantim_mqtt_new.cpp` (364 dòng) — entry point
 
 File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `globals.h`), `setup()`, `loop()`, đọc RS485, máy trạng thái FULL/MISSING.
 
@@ -57,7 +59,7 @@ File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `gl
 - `setup()`:
   1. Khởi động `Serial` (chờ tối đa 2s, không block vô hạn).
   2. `RS485.begin(...)` trên UART1.
-  3. `prefs.begin("distance", false)` → load toàn bộ config đã liệt kê ở `globals.h` (mỗi field có `getXxx()` tương ứng với `putXxx()` trong `saveDistanceConfig()` — xem lưu ý Bug 1 bên dưới).
+  3. `prefs.begin("distance", false)` (kiểm tra return value — thất bại thì log lỗi, GIỮ default trong RAM, không load) → load toàn bộ config đã liệt kê ở `globals.h` qua key bọc `NVS_KEY(...)` (mỗi field có `getXxx()` tương ứng với `putXxx()` trong `saveDistanceConfig()` — xem lưu ý Bug 1 bên dưới). Đối chiếu `cfg_ver` với `CFG_VERSION` (`globals.h`), log cảnh báo nếu cũ/thiếu (không tự xoá).
   4. Khởi tạo SPI + Ethernet W5500 (`ETH.begin`). Chờ có IP tối đa `ETH_WAIT_MS = 10000` bằng vòng lặp có timeout dựa trên `millis()` (không phải `while(!eth_connected)` vô hạn — đã fix so với Bug 2 trong spec doc cũ), nếu hết giờ vẫn tiếp tục boot không có mạng.
   5. Đăng ký route HTTP (`/`, `/data`, `/save`, `/test_mqtt`, `/test_osc`), `server.begin()`, `oscUdp.begin(9000)`.
   6. `mqttInit()`.
@@ -67,9 +69,9 @@ File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `gl
   - Đếm số sensor **enabled** đang trong ngưỡng (`isDistanceInRange()`) và chưa timeout (`RS485_TIMEOUT`).
   - `currentState = true` (FULL) chỉ khi **tất cả** sensor enabled đều trong ngưỡng.
   - Có nhánh `startupWaiting` riêng cho lần đầu sau boot (chờ `confirmTime` ổn định trước khi publish state đầu tiên), sau đó chuyển sang nhánh debounce thường: đổi state → reset `stateTimer`; giữ ổn định đủ `confirmTime` ms → gọi `triggerFull()`/`triggerMissing()` một lần (`actionDone` chặn gọi lặp).
-- `saveDistanceConfig()` — ghi toàn bộ config vào Preferences namespace `"distance"` (đối xứng với phần load trong `setup()`).
+- `int saveDistanceConfig()` — `prefs.begin("distance", false)` (kiểm tra return value, trả `-1` sớm nếu fail); ghi toàn bộ config vào Preferences qua key bọc `NVS_KEY(...)` (đối xứng với phần load trong `setup()`), đếm số `put*()` trả về 0-byte-written coi là lỗi (ngoại lệ: `putString()` trên field cho phép rỗng như `mqtt_user`/`mqtt_pass` không tính là lỗi khi giá trị thật sự rỗng); ghi thêm `cfg_ver = CFG_VERSION`; trả về tổng số lỗi.
 
-⚠️ **Lưu ý khi sửa Preferences key:** phần load (`setup()`) và save (`saveDistanceConfig()`) dùng cùng danh sách string key (`"osc_addr_full"`, `"osc_addr_miss"`, `"mqtt_ip"`, ...). Đây từng là nguồn Bug 1 (spec doc §8) — key load/save lệch tên khiến field mất sau reboot. Khi thêm field mới, đối chiếu kỹ 2 vị trí này (mục 4 CLAUDE.md).
+⚠️ **Lưu ý khi sửa Preferences key:** phần load (`setup()`) và save (`saveDistanceConfig()`) dùng cùng danh sách string key (`"osc_addr_full"`, `"osc_addr_miss"`, `"mqtt_ip"`, ...), mỗi literal PHẢI bọc `NVS_KEY(...)` (định nghĩa ở `globals.h`) để build fail nếu >15 ký tự thay vì âm thầm mất data. Đây từng là nguồn Bug 1 (spec doc §8, root cause: key NVS trùng tên field HTML và vượt giới hạn 15 ký tự — xem F29) — key load/save lệch tên hoặc quá dài khiến field mất sau reboot. Khi thêm field mới, đối chiếu kỹ 2 vị trí này (mục 4 CLAUDE.md), và KHÔNG dùng lại tên field HTML/hasArg làm key NVS.
 
 ---
 
@@ -97,12 +99,12 @@ MQTT client (ESP-IDF `esp_mqtt_client`, không phải PubSubClient) + gửi gói
 
 ---
 
-## `src/web.h` + `src/web.cpp` (6 + 190 dòng)
+## `src/web.h` + `src/web.cpp` (6 + 201 dòng)
 
 HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, `mqttInit()`, `triggerFull()`), **không** tự chứa business logic tính toán.
 
 - `handleData()` — GET `/data`, trả HTML fragment (trạng thái MQTT/OSC/FULL-MISSING + khoảng cách từng sensor) để trang chủ poll bằng JS (`fetch` mỗi 100ms, xem `html.cpp`).
-- `handleSave()` — POST `/save`, đọc toàn bộ field form (luôn `hasArg()` trước khi `arg()` — đúng mục 7 CLAUDE.md), copy vào buffer config bằng `strncpy` + null-terminate, gọi `saveDistanceConfig()`. Nếu MQTT server/port/user/pass đổi → restart MQTT client (`esp_mqtt_client_stop/destroy` rồi `mqttInit()` lại).
+- `handleSave()` — POST `/save`, đọc toàn bộ field form (luôn `hasArg()` trước khi `arg()` — đúng mục 7 CLAUDE.md), copy vào buffer config bằng `strncpy` + null-terminate, gọi `saveDistanceConfig()`. Nếu MQTT server/port/user/pass đổi → restart MQTT client (`esp_mqtt_client_stop/destroy` rồi `mqttInit()` lại). Phản hồi JS `alert(...)` dựa trên số lỗi `saveDistanceConfig()` trả về (F2) — "Saved OK" chỉ khi thật sự 0 lỗi, ngược lại báo số lỗi hoặc "Save FAILED" (không còn luôn báo OK vô điều kiện).
 - `handleTestMQTT()` / `handleTestOSC()` — POST, gọi `triggerFull()` để test thủ công (cả 2 handler hiện đều gọi `triggerFull()`, chưa có nhánh test riêng MISSING — xem ghi chú audit bên dưới).
 
 ⚠️ **Ghi chú audit (chưa fix, chưa xác nhận có phải bug hay cố ý):** `handleTestOSC()` gọi `triggerFull()` giống hệt `handleTestMQTT()` thay vì hàm test OSC riêng — 2 nút test hiện có hành vi giống nhau. Cần hỏi lại chủ dự án trước khi đổi hành vi.

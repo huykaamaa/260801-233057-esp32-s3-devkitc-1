@@ -88,46 +88,61 @@ void setup()
 
   RS485.begin(115200, SERIAL_8N1, RS485_RX, RS485_TX);
 
-  prefs.begin("distance", false);
-  for (int i = 0; i < DEVICE_NUM; i++) {
-    distanceMin[i] = prefs.getInt(("min" + String(i)).c_str(), distanceMin[i]);
-    distanceMax[i] = prefs.getInt(("max" + String(i)).c_str(), distanceMax[i]);
-    sensorEnabled[i] = prefs.getBool(("sensor" + String(i)).c_str(), sensorEnabled[i]);
+  if (!prefs.begin(NVS_KEY("distance"), false)) {
+    LOG("NVS: prefs.begin(distance) FAILED - using in-RAM defaults, config NOT loaded from flash");
+  } else {
+    uint32_t storedCfgVer = prefs.getUInt(NVS_KEY("cfg_ver"), 0);
+    if (storedCfgVer < CFG_VERSION) {
+      LOG("NVS: cfg_ver=%u (firmware expects %u) - saved config predates this key layout "
+          "(or was never saved). Values below still load under the CURRENT key names; "
+          "verify config on the Web UI, then hit Save once to re-stamp cfg_ver. To fully "
+          "wipe NVS instead, run tools/full_erase.sh.",
+          (unsigned)storedCfgVer, (unsigned)CFG_VERSION);
+    }
+
+    for (int i = 0; i < DEVICE_NUM; i++) {
+      distanceMin[i] = prefs.getInt(("min" + String(i)).c_str(), distanceMin[i]);
+      distanceMax[i] = prefs.getInt(("max" + String(i)).c_str(), distanceMax[i]);
+      sensorEnabled[i] = prefs.getBool(("sensor" + String(i)).c_str(), sensorEnabled[i]);
+    }
+    strncpy(mqttServer, prefs.getString(NVS_KEY("mqtt_ip"), "192.168.99.225").c_str(), sizeof(mqttServer) - 1);
+    mqttServer[sizeof(mqttServer) - 1] = '\0';
+
+    mqttPort = prefs.getUShort(NVS_KEY("mqtt_port"), 1883);
+    mqttEnabled = prefs.getBool(NVS_KEY("mqtt_en"), true);
+    strncpy(mqttUser, prefs.getString(NVS_KEY("mqtt_user"), "").c_str(), sizeof(mqttUser) - 1);
+    mqttUser[sizeof(mqttUser) - 1] = '\0';
+
+    strncpy(mqttPass, prefs.getString(NVS_KEY("mqtt_pass"), "").c_str(), sizeof(mqttPass) - 1);
+    mqttPass[sizeof(mqttPass) - 1] = '\0';
+
+    strncpy(mqttTopic, prefs.getString(NVS_KEY("mqtt_topic"), "sensor/people").c_str(), sizeof(mqttTopic) - 1);
+    mqttTopic[sizeof(mqttTopic) - 1] = '\0';
+
+    strncpy(mqttFullValue, prefs.getString(NVS_KEY("mqtt_full"), "FULL").c_str(), sizeof(mqttFullValue) - 1);
+    mqttFullValue[sizeof(mqttFullValue) - 1] = '\0';
+
+    strncpy(mqttMissingValue, prefs.getString(NVS_KEY("mqtt_missing"), "MISSING").c_str(), sizeof(mqttMissingValue) - 1);
+    mqttMissingValue[sizeof(mqttMissingValue) - 1] = '\0';
+
+    oscEnabled = prefs.getBool(NVS_KEY("osc_en"), false);
+    messengerEnabled = prefs.getBool(NVS_KEY("messenger_en"), false);
+    strncpy(oscIp, prefs.getString(NVS_KEY("osc_ip"), "192.168.99.100").c_str(), sizeof(oscIp) - 1);
+    oscIp[sizeof(oscIp) - 1] = '\0';
+    oscPort = prefs.getUShort(NVS_KEY("osc_port"), 9000);
+    // NOTE: NVS keys "osc_addr_full"/"osc_addr_miss" (<=15 chars) are intentionally NOT the
+    // same string as the HTML/hasArg field names "osc_address_full"/"osc_address_missing"
+    // (16/19 chars) - see NVS_KEY comment in globals.h (F29). Do not "fix" this back to match.
+    strncpy(oscAddressFull, prefs.getString(NVS_KEY("osc_addr_full"), "/composition/layers/1/clips/1/connect").c_str(), sizeof(oscAddressFull) - 1);
+    oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
+    strncpy(oscAddressMissing, prefs.getString(NVS_KEY("osc_addr_miss"), "/composition/layers/1/clips/1/connect").c_str(), sizeof(oscAddressMissing) - 1);
+    oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
+    oscValueFull = prefs.getInt(NVS_KEY("osc_value_full"), 1);
+    oscValueMissing = prefs.getInt(NVS_KEY("osc_value_miss"), 0);
+
+    confirmTime = prefs.getULong(NVS_KEY("confirm"), 1000);
+    prefs.end();
   }
-  strncpy(mqttServer, prefs.getString("mqtt_ip", "192.168.99.225").c_str(), sizeof(mqttServer) - 1);
-  mqttServer[sizeof(mqttServer) - 1] = '\0';
-
-  mqttPort = prefs.getUShort("mqtt_port", 1883);
-  mqttEnabled = prefs.getBool("mqtt_en", true);
-  strncpy(mqttUser, prefs.getString("mqtt_user", "").c_str(), sizeof(mqttUser) - 1);
-  mqttUser[sizeof(mqttUser) - 1] = '\0';
-
-  strncpy(mqttPass, prefs.getString("mqtt_pass", "").c_str(), sizeof(mqttPass) - 1);
-  mqttPass[sizeof(mqttPass) - 1] = '\0';
-
-  strncpy(mqttTopic, prefs.getString("mqtt_topic", "sensor/people").c_str(), sizeof(mqttTopic) - 1);
-  mqttTopic[sizeof(mqttTopic) - 1] = '\0';
-
-  strncpy(mqttFullValue, prefs.getString("mqtt_full", "FULL").c_str(), sizeof(mqttFullValue) - 1);
-  mqttFullValue[sizeof(mqttFullValue) - 1] = '\0';
-
-  strncpy(mqttMissingValue, prefs.getString("mqtt_missing", "MISSING").c_str(), sizeof(mqttMissingValue) - 1);
-  mqttMissingValue[sizeof(mqttMissingValue) - 1] = '\0';
-
-  oscEnabled = prefs.getBool("osc_en", false);
-  messengerEnabled = prefs.getBool("messenger_en", false);
-  strncpy(oscIp, prefs.getString("osc_ip", "192.168.99.100").c_str(), sizeof(oscIp) - 1);
-  oscIp[sizeof(oscIp) - 1] = '\0';
-  oscPort = prefs.getUShort("osc_port", 9000);
-  strncpy(oscAddressFull, prefs.getString("osc_address_full", "/composition/layers/1/clips/1/connect").c_str(), sizeof(oscAddressFull) - 1);
-  oscAddressFull[sizeof(oscAddressFull) - 1] = '\0';
-  strncpy(oscAddressMissing, prefs.getString("osc_address_missing", "/composition/layers/1/clips/1/connect").c_str(), sizeof(oscAddressMissing) - 1);
-  oscAddressMissing[sizeof(oscAddressMissing) - 1] = '\0';
-  oscValueFull = prefs.getInt("osc_value_full", 1);
-  oscValueMissing = prefs.getInt("osc_value_missing", 0);
-
-  confirmTime = prefs.getULong("confirm", 1000);
-  prefs.end();
 
   WiFi.onEvent(WiFiEvent);
   spi.begin(ETH_SCK, ETH_MISO, ETH_MOSI, ETH_CS);
@@ -286,32 +301,64 @@ void checkDistance()
   }
 }
 
-void saveDistanceConfig()
+int saveDistanceConfig()
 {
-  prefs.begin("distance", false);
-  prefs.putString("mqtt_ip", mqttServer);
-  prefs.putUShort("mqtt_port", mqttPort);
-  prefs.putString("mqtt_user", mqttUser);
-  prefs.putString("mqtt_pass", mqttPass);
-  prefs.putString("mqtt_topic", mqttTopic);
-  prefs.putBool("mqtt_en", mqttEnabled);
-  prefs.putString("mqtt_full", mqttFullValue);
-  prefs.putString("mqtt_missing", mqttMissingValue);
-
-  for (int i = 0; i < DEVICE_NUM; i++) {
-    prefs.putInt(("min" + String(i)).c_str(), distanceMin[i]);
-    prefs.putInt(("max" + String(i)).c_str(), distanceMax[i]);
-    prefs.putBool(("sensor" + String(i)).c_str(), sensorEnabled[i]);
+  if (!prefs.begin(NVS_KEY("distance"), false)) {
+    LOG("NVS: prefs.begin(distance) FAILED on save - nothing was written to flash");
+    return -1;
   }
 
-  prefs.putBool("osc_en", oscEnabled);
-  prefs.putBool("messenger_en", messengerEnabled);
-  prefs.putString("osc_ip", oscIp);
-  prefs.putUShort("osc_port", oscPort);
-  prefs.putString("osc_address_full", oscAddressFull);
-  prefs.putString("osc_address_missing", oscAddressMissing);
-  prefs.putInt("osc_value_full", oscValueFull);
-  prefs.putInt("osc_value_missing", oscValueMissing);
-  prefs.putULong("confirm", confirmTime);
+  int failCount = 0;
+
+  // putX() returns bytes written; 0 means the write failed EXCEPT for putString() on a
+  // legitimately empty string (mqtt_user/mqtt_pass may be blank by design), which also
+  // returns 0 on success - so only flag putString() as failed when the source is non-empty.
+  auto checkStr = [&](size_t written, const char* value, const char* keyForLog) {
+    if (written == 0 && value[0] != '\0') {
+      LOG("NVS: putString(%s) failed", keyForLog);
+      failCount++;
+    }
+  };
+  auto checkFixed = [&](size_t written, const char* keyForLog) {
+    if (written == 0) {
+      LOG("NVS: put(%s) failed", keyForLog);
+      failCount++;
+    }
+  };
+
+  checkStr(prefs.putString(NVS_KEY("mqtt_ip"), mqttServer), mqttServer, "mqtt_ip");
+  checkFixed(prefs.putUShort(NVS_KEY("mqtt_port"), mqttPort), "mqtt_port");
+  checkStr(prefs.putString(NVS_KEY("mqtt_user"), mqttUser), mqttUser, "mqtt_user");
+  checkStr(prefs.putString(NVS_KEY("mqtt_pass"), mqttPass), mqttPass, "mqtt_pass");
+  checkStr(prefs.putString(NVS_KEY("mqtt_topic"), mqttTopic), mqttTopic, "mqtt_topic");
+  checkFixed(prefs.putBool(NVS_KEY("mqtt_en"), mqttEnabled), "mqtt_en");
+  checkStr(prefs.putString(NVS_KEY("mqtt_full"), mqttFullValue), mqttFullValue, "mqtt_full");
+  checkStr(prefs.putString(NVS_KEY("mqtt_missing"), mqttMissingValue), mqttMissingValue, "mqtt_missing");
+
+  for (int i = 0; i < DEVICE_NUM; i++) {
+    String minKey = "min" + String(i);
+    String maxKey = "max" + String(i);
+    String sensorKey = "sensor" + String(i);
+    checkFixed(prefs.putInt(minKey.c_str(), distanceMin[i]), minKey.c_str());
+    checkFixed(prefs.putInt(maxKey.c_str(), distanceMax[i]), maxKey.c_str());
+    checkFixed(prefs.putBool(sensorKey.c_str(), sensorEnabled[i]), sensorKey.c_str());
+  }
+
+  checkFixed(prefs.putBool(NVS_KEY("osc_en"), oscEnabled), "osc_en");
+  checkFixed(prefs.putBool(NVS_KEY("messenger_en"), messengerEnabled), "messenger_en");
+  checkStr(prefs.putString(NVS_KEY("osc_ip"), oscIp), oscIp, "osc_ip");
+  checkFixed(prefs.putUShort(NVS_KEY("osc_port"), oscPort), "osc_port");
+  checkStr(prefs.putString(NVS_KEY("osc_addr_full"), oscAddressFull), oscAddressFull, "osc_addr_full");
+  checkStr(prefs.putString(NVS_KEY("osc_addr_miss"), oscAddressMissing), oscAddressMissing, "osc_addr_miss");
+  checkFixed(prefs.putInt(NVS_KEY("osc_value_full"), oscValueFull), "osc_value_full");
+  checkFixed(prefs.putInt(NVS_KEY("osc_value_miss"), oscValueMissing), "osc_value_miss");
+  checkFixed(prefs.putULong(NVS_KEY("confirm"), confirmTime), "confirm");
+  checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
+
   prefs.end();
+
+  if (failCount > 0) {
+    LOG("NVS: saveDistanceConfig() had %d failed write(s)", failCount);
+  }
+  return failCount;
 }

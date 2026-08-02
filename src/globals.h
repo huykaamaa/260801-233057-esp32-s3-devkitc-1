@@ -11,6 +11,36 @@
 
 #define LOG(fmt, ...) do { Serial.printf(fmt "\r\n", ##__VA_ARGS__); } while(0)
 
+// --- NVS / Preferences key-length guard (F1, F29) ---------------------------------------
+// ESP32 NVS caps key names at NVS_KEY_NAME_MAX_SIZE = 16 bytes INCLUDING the NUL
+// terminator => 15 usable chars. Preferences::putX()/getX() do NOT surface this as a
+// compile or runtime error: putX() silently returns 0 (nvs_set_str/nvs_set_iX returns
+// ESP_ERR_NVS_KEY_TOO_LONG under the hood) and getX() silently returns the caller's
+// default. A key one character too long looks identical to "field was never saved" —
+// this is exactly what caused Bug 1 (OSC Full Address surviving reboot, Full Value not).
+//
+// Wrap every string LITERAL used as an NVS/Preferences key (or namespace) with
+// NVS_KEY(...) so an over-length key fails the BUILD instead of silently losing data
+// in the field. Keys built at runtime (e.g. "min" + String(i)) can't use this — keep
+// those short and bounded by construction (DEVICE_NUM is small, single-digit suffix).
+//
+// NVS keys are DELIBERATELY a separate namespace of names from the HTTP form field
+// names in html.cpp/web.cpp's server.hasArg(...) — HTTP arg names have no length limit,
+// NVS keys do. Renaming an HTTP field "for clarity" must never be copy-pasted into the
+// NVS key, and vice versa (root cause of F29).
+template <size_t N>
+constexpr const char* NVS_KEY(const char (&s)[N]) {
+  static_assert(N <= 16, "NVS key too long: max 15 chars + NUL (Preferences/NVS limit, see globals.h)");
+  return s;
+}
+
+// Bump whenever the NVS key layout (names/types) for the "distance" namespace changes.
+// See saveDistanceConfig()/setup() in cantim_mqtt_new.cpp for the boot-time check —
+// it only LOGS a warning, it never auto-wipes (device is unattended in the field;
+// silently discarding an operator's saved broker/OSC config would be worse than doing
+// nothing). To fully wipe NVS on purpose, use tools/full_erase.sh (not web-exposed).
+#define CFG_VERSION 1
+
 extern SPIClass spi;
 extern WebServer server;
 extern HardwareSerial RS485;
@@ -60,4 +90,6 @@ extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;
 extern bool eth_connected;
 
-void saveDistanceConfig();
+// Returns the number of failed put*() calls (0 = fully saved), or -1 if
+// prefs.begin() itself failed (namespace could not be opened, nothing was written).
+int saveDistanceConfig();

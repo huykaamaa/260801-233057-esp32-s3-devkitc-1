@@ -224,7 +224,7 @@ Firmware **không** hardcode MQTT username/password mặc định trong source c
 
 # 8. Các lỗi đã phát hiện
 
-## Bug 1
+## Bug 1 — ✅ FIXED (2026-08-02, F1/F29/F2/F4)
 
 OSC Full Address không được restore sau reboot.
 
@@ -241,7 +241,25 @@ Khả năng:
 * sai thứ tự load
 * buffer overwrite
 
-Cần audit.
+**Root cause xác nhận:** sai key Preferences — nhưng không phải "sai" theo nghĩa typo,
+mà là **quá dài**. NVS giới hạn tên key `NVS_KEY_NAME_MAX_SIZE=16` byte KỂ CẢ NUL =>
+15 ký tự dùng được. `"osc_address_full"` (16 ký tự), `"osc_address_missing"` (19),
+`"osc_value_missing"` (17) đều vượt giới hạn này — `Preferences::putString()`/`getString()`
+âm thầm trả về lỗi (không exception, không log), giống hệt "chưa từng lưu". `osc_value_full`
+(14 ký tự) vừa đủ nên sống sót — đúng khớp hiện tượng "Full Value còn, Full Address mất".
+
+Nguyên nhân kiến trúc sâu hơn (F29): key NVS dùng CHUNG literal với tên field HTML form
+(`server.hasArg(...)` trong web.cpp/html.cpp) — HTTP arg name không giới hạn độ dài, NVS
+key thì có. Đổi tên field "cho rõ nghĩa" vô tình phá NVS.
+
+**Fix:** đổi 3 key NVS thành `osc_addr_full`/`osc_addr_miss`/`osc_value_miss` (≤15 ký tự,
+TÁCH biệt khỏi tên field HTML/hasArg — không đổi tên field HTML). Thêm macro `NVS_KEY(...)`
+(template + `static_assert`) trong `globals.h`, bọc quanh MỌI literal key NVS hiện có để lớp
+bug này fail ở BUILD TIME thay vì âm thầm mất data ở field. Thêm `cfg_ver` (schema version,
+`CFG_VERSION` trong `globals.h`) — log cảnh báo ở boot nếu version cũ/thiếu, KHÔNG tự xoá NVS
+(xem `tools/full_erase.sh` nếu cần xoá tay). `saveDistanceConfig()` giờ trả về số lượng
+`put*()` thất bại (F2) thay vì `void`; `handleSave()` trong `web.cpp` phản hồi trung thực
+("Saved OK" chỉ khi thật sự OK) thay vì luôn báo "Saved OK".
 
 ---
 
