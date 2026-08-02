@@ -34,10 +34,13 @@ static bool parseValidatedLong(const String& s, long minVal, long maxVal, long& 
 void handleData() {
   String data;
   data += "<b>MQTT:</b> ";
-  data += mqttConnected ?
-          "<span style='color:green'>CONNECTED</span>"
-          :
-          "<span style='color:red'>DISCONNECTED</span>";
+  if (!mqttEnabled) {
+    data += "<span style='color:gray'>DISABLED</span>";
+  } else if (mqttConnected) {
+    data += "<span style='color:green'>CONNECTED</span>";
+  } else {
+    data += "<span style='color:red'>DISCONNECTED</span>";
+  }
   data += "<br>";
   data += "<b>OSC:</b> ";
   data += oscEnabled ?
