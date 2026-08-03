@@ -247,6 +247,11 @@ void handleRoot()
   html += "<div class='panel'>";
   html += "<h3>Ethernet Static IP (fallback)</h3>";
   html += "<div class='single'>";
+  html += "<label><input type='checkbox' name='eth_static_first' value='1'";
+  html += ethUseStaticFirst ? " checked" : "";
+  html += "> Ưu tiên IP tĩnh (bỏ qua DHCP)</label>";
+  html += "</div>";
+  html += "<div class='single'>";
   html += "<label>Static IP</label>";
   html += "<input name='eth_ip' value='";
   html += htmlEscape(ethStaticIp);
@@ -264,7 +269,7 @@ void handleRoot()
   html += htmlEscape(ethStaticNetmask);
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Thiết bị luôn thử DHCP trước (tối đa 10s lúc boot). Chỉ khi không có DHCP server, thiết bị mới tự gán IP tĩnh này để Web UI còn truy cập được. Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng IP tĩnh mới nếu rơi vào fallback.</div>";
+  html += "<div class='note'>Mặc định: thiết bị thử DHCP trước (tối đa 10s lúc boot), chỉ dùng IP tĩnh này khi không có DHCP server. Tick \"Ưu tiên IP tĩnh\" để dùng IP tĩnh ngay từ đầu, bỏ qua hoàn toàn 10s chờ DHCP - nếu IP/Gateway/Netmask nhập sai thì tự động lùi về thử DHCP như bình thường. Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng cấu hình mới.</div>";
   html += "</div>";
   html += "</div>"; // end tab-network
   html += "<input class='btn' type='submit' value='SAVE SETTINGS'>";

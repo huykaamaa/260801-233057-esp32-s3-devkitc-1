@@ -114,6 +114,12 @@ extern char ethStaticIp[16];
 extern char ethStaticGateway[16];
 extern char ethStaticNetmask[16];
 
+// When true, setup() applies the static IP immediately at boot and skips the DHCP wait
+// entirely (faster boot; useful on networks with no DHCP server, or when a fixed IP is
+// required). Falls back to the normal DHCP-then-static-fallback path below if the static
+// IP/gateway/netmask don't parse, so a bad entry here never gets the device stuck.
+extern bool ethUseStaticFirst;
+
 // Returns the number of failed put*() calls (0 = fully saved), or -1 if
 // prefs.begin() itself failed (namespace could not be opened, nothing was written).
 int saveDistanceConfig();

@@ -292,6 +292,8 @@ void handleSave() {
     }
   }
 
+  ethUseStaticFirst = server.hasArg("eth_static_first");
+
   int saveFailCount = saveDistanceConfig();
 
   if (needRestartMQTT) {

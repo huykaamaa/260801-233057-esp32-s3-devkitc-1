@@ -59,6 +59,7 @@ bool eth_connected = false;         // Trạng thái kết nối Ethernet
 char ethStaticIp[16] = "192.168.99.199";
 char ethStaticGateway[16] = "192.168.99.1";
 char ethStaticNetmask[16] = "255.255.255.0";
+bool ethUseStaticFirst = false;
 
 // Diagnostic WiFi AP - broadcasts the current ETH IP as its SSID for a few minutes after
 // boot so an operator can read the device's IP off a phone's WiFi list instead of needing
@@ -190,6 +191,7 @@ void setup()
     ethStaticGateway[sizeof(ethStaticGateway) - 1] = '\0';
     strncpy(ethStaticNetmask, prefs.getString(NVS_KEY("eth_mask"), "255.255.255.0").c_str(), sizeof(ethStaticNetmask) - 1);
     ethStaticNetmask[sizeof(ethStaticNetmask) - 1] = '\0';
+    ethUseStaticFirst = prefs.getBool(NVS_KEY("eth_first"), false);
 
     prefs.end();
   }
@@ -208,12 +210,33 @@ void setup()
     LOG("ETH Failed");
   }
 
+  bool ethFallbackUsed = false;
+
+  // "Ưu tiên IP tĩnh": apply the static IP right away and skip the DHCP wait entirely
+  // (faster boot; useful when the network has no DHCP server, or a fixed IP is wanted for
+  // certain). Falls through to the normal DHCP-then-fallback path below if the static
+  // IP/gateway/netmask don't parse, so a bad entry here never leaves the device stuck.
+  if (ethUseStaticFirst) {
+    IPAddress ip, gw, mask;
+    if (ip.fromString(ethStaticIp) && gw.fromString(ethStaticGateway) && mask.fromString(ethStaticNetmask)) {
+      // Gateway as DNS1, same reasoning as the static fallback branch below (F34).
+      if (ETH.config(ip, gw, mask, gw)) {
+        eth_connected = true;
+        ethFallbackUsed = true;
+        LOG("ETH: static IP applied immediately (uu tien) - %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
+      } else {
+        LOG("ETH: ETH.config() (uu tien IP tinh) failed - falling back to DHCP");
+      }
+    } else {
+      LOG("ETH: static IP (uu tien) failed to parse - falling back to DHCP");
+    }
+  }
+
   const unsigned long ETH_WAIT_MS = 10000UL;
   unsigned long ethStart = millis();
   while (!eth_connected && (millis() - ethStart) < ETH_WAIT_MS) {
     delay(100);
   }
-  bool ethFallbackUsed = false;
   if (!eth_connected) {
     LOG("ETH did not get IP within %lu ms, applying static fallback so the Web UI stays reachable (F19)", ETH_WAIT_MS);
     // F19: no DHCP server reachable and no link-local (autoip) fallback in this build's
@@ -483,6 +506,7 @@ int saveDistanceConfig()
   checkStr(prefs.putString(NVS_KEY("eth_ip"), ethStaticIp), ethStaticIp, "eth_ip");
   checkStr(prefs.putString(NVS_KEY("eth_gw"), ethStaticGateway), ethStaticGateway, "eth_gw");
   checkStr(prefs.putString(NVS_KEY("eth_mask"), ethStaticNetmask), ethStaticNetmask, "eth_mask");
+  checkFixed(prefs.putBool(NVS_KEY("eth_first"), ethUseStaticFirst), "eth_first");
   checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
 
   prefs.end();
