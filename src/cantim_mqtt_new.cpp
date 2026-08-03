@@ -9,6 +9,8 @@
 #include <WiFi.h>
 #include <cstring>
 
+#define DEBUG_RS485 1  // 1 = in id/distance mỗi lần nhận dòng RS485 hợp lệ ra Serial, 0 = tắt
+
 SPIClass spi(FSPI);
 WebServer server(80);                // Web server chạy trên cổng 80
 HardwareSerial RS485(1);             // UART1 dùng cho RS485
@@ -353,6 +355,9 @@ void readRS485()
       if (isValidDeviceId(id, DEVICE_NUM)) {
         rsDistance[id - 1] = distance;
         lastRS485[id - 1] = millis();
+#if DEBUG_RS485
+        Serial.printf("RS485 recv: id=%d distance=%d\n", id, distance);
+#endif
       } else {
         LOG("ID khong hop le");
       }
