@@ -114,7 +114,11 @@ void handleSave() {
 
   bool needRestartMQTT = false;
 
-  if (server.hasArg("mqtt_ip")) {
+  // F33: an empty mqtt_ip would otherwise strncpy() straight into mqttServer, turning the
+  // broker URI into "mqtt://:1883" - esp_mqtt_client_init() fails on that and MQTT stays
+  // dead until fixed again via this same form. Blank submit = keep current, same rule as
+  // mqtt_pass/auth_pass above.
+  if (server.hasArg("mqtt_ip") && server.arg("mqtt_ip").length() > 0) {
     strncpy(mqttServer, server.arg("mqtt_ip").c_str(), sizeof(mqttServer) - 1);
     mqttServer[sizeof(mqttServer) - 1] = '\0';
     needRestartMQTT = true;
