@@ -226,7 +226,11 @@ void setup()
     // path), so eth_connected is set here explicitly rather than relying on WiFiEvent().
     IPAddress fallbackIp, fallbackGw, fallbackMask;
     if (fallbackIp.fromString(ethStaticIp) && fallbackGw.fromString(ethStaticGateway) && fallbackMask.fromString(ethStaticNetmask)) {
-      if (ETH.config(fallbackIp, fallbackGw, fallbackMask)) {
+      // F34: ETH.config() with only 3 args leaves DNS empty. mqttServer is fed into
+      // "mqtt://%s:%u" so a hostname is a valid input, but on this static-fallback branch
+      // a hostname would never resolve without a DNS server - pass the gateway as DNS1
+      // (same assumption the rest of this fallback already makes: the gateway is reachable).
+      if (ETH.config(fallbackIp, fallbackGw, fallbackMask, fallbackGw)) {
         eth_connected = true;
         ethFallbackUsed = true;
         LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
