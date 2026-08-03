@@ -110,6 +110,13 @@ void handleSave() {
       }
     }
     sensorEnabled[i] = server.hasArg("sensor" + String(i));
+    if (!sensorEnabled[i]) {
+      // Sensor bi tat (uncheck) tren Web UI - reset flag ngay, tranh dong bang tu lan
+      // offline truoc do va bo lo canh bao cho lan offline MOI sau khi bat lai (xem
+      // checkDistance() trong cantim_mqtt_new.cpp - flag chi duoc dung/reset khi sensor
+      // dang enable).
+      sensorOfflineAlerted[i] = false;
+    }
   }
 
   bool needRestartMQTT = false;
