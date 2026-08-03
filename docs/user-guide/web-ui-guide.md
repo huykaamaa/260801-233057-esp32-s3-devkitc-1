@@ -2,7 +2,7 @@
 
 > Dành cho người vận hành thiết bị (không cần biết code). Mô tả toàn bộ tính năng hiện có trên trang cấu hình web của thiết bị.
 
-Cập nhật lần cuối: 2026-08-02 (thêm tab "Mạng (Ethernet)", thêm WiFi AP chẩn đoán `CANTIM-<ip>`).
+Cập nhật lần cuối: 2026-08-03 (ô MQTT Password không hiện lại giá trị cũ nữa; thêm tick "Ưu tiên IP tĩnh" trên tab Mạng).
 
 ---
 
@@ -66,7 +66,7 @@ Giá trị mặc định (khi chưa từng Save lần nào): MIN = 200mm, MAX = 
 | **Enable MQTT** | Bật/tắt gửi dữ liệu qua MQTT. Tắt thì các trường bên dưới vẫn lưu nhưng không publish. |
 | **MQTT IP** | Địa chỉ broker MQTT. |
 | **MQTT Port** | Cổng broker (mặc định 1883). |
-| **Username / Password** | Thông tin đăng nhập broker (bỏ trống nếu broker không yêu cầu). |
+| **Username / Password** | Thông tin đăng nhập broker (bỏ trống nếu broker không yêu cầu). Ô **Password luôn hiện rỗng trên form** (không hiện lại mật khẩu đã lưu) — để trống khi Save nghĩa là giữ nguyên mật khẩu cũ, giống ô Password ở mục 5b. Muốn xóa hẳn mật khẩu: xóa trắng ô **Username** rồi Save — thiết bị chuyển sang kết nối anonymous (không gửi username lẫn password) dù mật khẩu cũ vẫn còn nằm trong bộ nhớ. |
 | **MQTT Topic** | Topic sẽ publish trạng thái vào. |
 | **FULL Message** | Nội dung payload gửi khi trạng thái chuyển sang FULL (mặc định `FULL`). |
 | **MISSING Message** | Nội dung payload gửi khi trạng thái chuyển sang MISSING (mặc định `MISSING`). |
@@ -126,15 +126,18 @@ Nằm ở tab **"Mạng (Ethernet)"** riêng (xem mục 1), không chung tab v�
 
 | Trường | Ý nghĩa |
 |---|---|
-| **Static IP** | Địa chỉ IP tĩnh dự phòng. Mặc định `192.168.99.199`. |
+| **Ưu tiên IP tĩnh (bỏ qua DHCP)** | Tick bật: thiết bị dùng IP tĩnh bên dưới **ngay từ đầu lúc boot**, bỏ qua hoàn toàn 10 giây chờ DHCP. Mặc định **tắt** (giữ hành vi cũ: thử DHCP trước, chỉ dùng IP tĩnh khi DHCP thất bại). |
+| **Static IP** | Địa chỉ IP tĩnh. Mặc định `192.168.99.199`. |
 | **Gateway** | Gateway tương ứng. Mặc định `192.168.99.1`. |
 | **Netmask** | Subnet mask tương ứng. Mặc định `255.255.255.0`. |
 
-**Đây KHÔNG phải IP chính của thiết bị.** Thiết bị luôn thử xin IP qua DHCP trước (tối đa ~10 giây mỗi lần boot). 3 giá trị ở tab này **chỉ được dùng khi DHCP thất bại** (mạng không có DHCP server, hoặc router chưa cấp IP kịp trong 10 giây đó) — lúc đó thiết bị tự gán 3 giá trị này làm IP của chính nó, để Web UI vẫn còn truy cập được thay vì mất mạng hoàn toàn (xem thêm mục 1, mục 8).
+**Mặc định (tick tắt): đây KHÔNG phải IP chính của thiết bị.** Thiết bị luôn thử xin IP qua DHCP trước (tối đa ~10 giây mỗi lần boot). 3 giá trị IP/Gateway/Netmask **chỉ được dùng khi DHCP thất bại** (mạng không có DHCP server, hoặc router chưa cấp IP kịp trong 10 giây đó) — lúc đó thiết bị tự gán 3 giá trị này làm IP của chính nó, để Web UI vẫn còn truy cập được thay vì mất mạng hoàn toàn (xem thêm mục 1, mục 8).
 
-- Mỗi ô phải là **địa chỉ IPv4 hợp lệ** (dạng `a.b.c.d`, ví dụ `192.168.99.199`) — nhập sai định dạng sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), giá trị cũ vẫn giữ nguyên.
-- **Đổi giá trị ở đây không có tác dụng ngay lập tức.** Thiết bị chỉ đọc lại 3 giá trị này lúc **boot** (cắm điện lại) và **chỉ khi lần đó DHCP thất bại**. Nếu mạng vẫn có DHCP hoạt động bình thường, đổi IP tĩnh dự phòng ở đây sẽ **không thấy thay đổi gì** trên thiết bị đang chạy — đó là bình thường, không phải lỗi.
-- Muốn xác nhận IP tĩnh mới đã áp dụng: rút dây mạng (hoặc tắt DHCP server) rồi cắm lại điện thiết bị, đợi ~10 giây, sau đó truy cập bằng IP tĩnh vừa đặt.
+**Bật tick "Ưu tiên IP tĩnh":** thiết bị dùng thẳng 3 giá trị IP/Gateway/Netmask làm IP của nó ngay khi boot, không chờ DHCP — boot nhanh hơn, phù hợp khi mạng không có DHCP server hoặc cần thiết bị luôn có IP cố định chắc chắn. Nếu IP/Gateway/Netmask nhập sai định dạng thì thiết bị **tự động lùi về thử DHCP như bình thường** (không bị kẹt cứng).
+
+- Mỗi ô IP/Gateway/Netmask phải là **địa chỉ IPv4 hợp lệ** (dạng `a.b.c.d`, ví dụ `192.168.99.199`) — nhập sai định dạng sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), giá trị cũ vẫn giữ nguyên.
+- **Đổi giá trị ở đây không có tác dụng ngay lập tức.** Thiết bị chỉ đọc lại các giá trị này lúc **boot** (cắm điện lại). Nếu tick "Ưu tiên IP tĩnh" đang **tắt** và mạng vẫn có DHCP hoạt động bình thường, đổi IP tĩnh ở đây sẽ **không thấy thay đổi gì** trên thiết bị đang chạy — đó là bình thường, không phải lỗi.
+- Muốn xác nhận IP tĩnh mới đã áp dụng (khi tick tắt): rút dây mạng (hoặc tắt DHCP server) rồi cắm lại điện thiết bị, đợi ~10 giây, sau đó truy cập bằng IP tĩnh vừa đặt. Khi tick **bật**, chỉ cần cắm lại điện là thấy ngay, không cần rút dây mạng.
 
 ---
 

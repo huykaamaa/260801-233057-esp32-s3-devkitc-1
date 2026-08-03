@@ -91,6 +91,13 @@ MQTT          Web UI
 * **(Mới, 2026-08-02)** 3 giá trị IP tĩnh dự phòng trên giờ sửa được qua Web UI, tab **"Mạng
   (Ethernet)"** riêng (trước đó chỉ sửa được qua NVS trực tiếp) — xem
   `docs/user-guide/web-ui-guide.md` mục 5c.
+* **(Mới, F34, 2026-08-03)** `ETH.config()` ở nhánh static fallback giờ truyền gateway làm
+  DNS1 (`ETH.config(ip, gw, mask, gw)`) — trước đó DNS để trống nên broker nhập bằng hostname
+  không resolve được khi rơi vào fallback.
+* **(Mới, F32-uu-tien-ip-tinh, 2026-08-03)** Thêm tick **"Ưu tiên IP tĩnh (bỏ qua DHCP)"**
+  trên tab Mạng (`ethUseStaticFirst`, NVS key `eth_first`). Bật lên → `setup()` áp IP tĩnh
+  ngay từ đầu, bỏ qua hoàn toàn 10s chờ DHCP; nếu IP/gateway/netmask nhập sai thì tự động lùi
+  về DHCP-rồi-fallback như cũ, không bị kẹt. Port từ project `gia_sach`.
 
 ## MQTT
 
@@ -109,10 +116,14 @@ UI). Trang chủ `/` và endpoint polling `/data` (đọc trạng thái realtime
 
 Cho phép cấu hình:
 
-* MQTT Server
+* MQTT Server (F33: submit rỗng = giữ nguyên, không còn ghi đè thành chuỗi rỗng làm chết MQTT)
 * MQTT Port (validate 1-65535, F16)
 * MQTT Username
-* MQTT Password
+* MQTT Password — **(Mới, F32, 2026-08-03)** ô Password không còn hiện lại giá trị đã lưu
+  trong HTML nữa (trước đó `/` không cần đăng nhập nên ai vào được LAN cũng đọc được password
+  broker bằng View Source/curl); để trống khi Save = giữ nguyên. Xóa trắng Username = chuyển
+  hẳn sang kết nối anonymous (không gửi username lẫn password) — đường thoát duy nhất để "xóa"
+  password vì ô này không đọc lại được nữa.
 * MQTT Topic
 
 Thông số sensor:

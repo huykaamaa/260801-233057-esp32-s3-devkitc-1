@@ -2,6 +2,11 @@
 
 Ghi ngày 2026-08-03. Nguồn: audit project `gia_sach` (commit `1451d3e`, `babee5e`).
 
+**Cập nhật 2026-08-03:** A1-A5 đã fix (gán mã F32/F33/F34/F36), xem
+`docs/user-take-note/project-spec-v1.md` §4. Đã port thêm tính năng "Ưu tiên IP tĩnh"
+(`ethUseStaticFirst`) từ gia_sach cùng đợt (không có trong audit gốc, user yêu cầu riêng).
+Mục D đã kiểm — D1 (mqttEnabled) không áp dụng, xem ghi chú tại chỗ.
+
 Code mạng của `gia_sach` tách ra từ project này, nên phần lớn lỗi là chung. Danh sách dưới đây
 **đã đối chiếu thực tế với source của can_tim** tại commit `445f7c2` — không phải chép nguyên
 list của gia_sach sang. Số dòng là của commit đó, kiểm lại nếu file đã đổi.
@@ -13,7 +18,7 @@ Các mục **chưa được gán mã F** — cố ý không tự đặt số đ�
 
 ## A. CẦN SỬA — đã xác nhận còn lỗi
 
-### A1. Lộ mật khẩu MQTT qua trang `/` không cần đăng nhập  🔴
+### A1. Lộ mật khẩu MQTT qua trang `/` không cần đăng nhập  🔴 — ✅ FIXED (F32, 2026-08-03)
 
 `src/html.cpp:156-157`
 
@@ -35,7 +40,7 @@ Lưu ý phát sinh: khi Pass không đọc lại được thì **không xóa đ�
 Cách xử lý ở `gia_sach`: cho `mqtt_user` xóa trắng được, và trong `mqttInit()` chỉ gửi
 password khi username khác rỗng → xóa User = chuyển hẳn sang anonymous.
 
-### A2. `mqtt_ip` rỗng làm chết MQTT  🟡
+### A2. `mqtt_ip` rỗng làm chết MQTT  🟡 — ✅ FIXED (F33, 2026-08-03)
 
 `src/web.cpp:117-118` — `strncpy` thẳng, không guard rỗng.
 
@@ -45,7 +50,7 @@ tới khi sửa lại qua web.
 **Sửa:** guard `.length() > 0` (để trống = giữ nguyên). Ở `gia_sach` gom thành helper
 `saveStringArg()` dùng lại cho nhiều trường.
 
-### A3. `ETH.config()` không set DNS  🟡
+### A3. `ETH.config()` không set DNS  🟡 — ✅ FIXED (F34, 2026-08-03)
 
 `src/cantim_mqtt_new.cpp:229`
 
@@ -58,7 +63,7 @@ hostname**, nhưng ở nhánh static fallback thì hostname không resolve đư�
 
 **Sửa:** truyền gateway làm DNS1 — `ETH.config(ip, gw, mask, gw)`.
 
-### A4. `upload_port = auto` trong platformio.ini  🟡
+### A4. `upload_port = auto` trong platformio.ini  🟡 — ✅ FIXED (F35, 2026-08-03)
 
 `platformio.ini:19`
 
@@ -73,7 +78,7 @@ A fatal error occurred: Could not open auto, the port is busy or doesn't exist.
 
 **Sửa:** xóa cả `upload_port` lẫn `monitor_port`. Giữ `monitor_speed`.
 
-### A5. Ô tick bị kéo dãn full chiều rộng  🟢
+### A5. Ô tick bị kéo dãn full chiều rộng  🟢 — ✅ FIXED (F36, 2026-08-03)
 
 `src/html.cpp:49-50`
 
@@ -120,11 +125,13 @@ nguyên". Form luôn post đủ trường nên thực tế không khác nhau.
 
 ---
 
-## D. Chưa kiểm — xem khi bắt tay vào
+## D. Đã kiểm 2026-08-03
 
-- Bật/tắt "Enable MQTT" có ngắt hẳn client không hay chỉ chặn publish. `mqtt.cpp:88,113` có
-  guard `mqttEnabled` nhưng chưa rõ có restart client. Ở `gia_sach` đã đổi thành ngắt hẳn, vì
-  trước đó dashboard vẫn báo CONNECTED sau khi bỏ tick.
+- ~~Bật/tắt "Enable MQTT" có ngắt hẳn client không~~ — **KHÔNG áp dụng ở đây.**
+  `web.cpp:37` (`handleData()`) đã hiển thị `DISABLED` khi `!mqttEnabled`, không phụ thuộc
+  `mqttConnected` — nên triệu chứng của gia_sach (dashboard vẫn báo CONNECTED sau khi bỏ tick)
+  không xảy ra. Client TCP nền vẫn giữ kết nối khi bỏ tick (chỉ chặn publish), đó là lựa chọn
+  thiết kế đã đúng, không phải bug.
 - `oscUdp.begin(9000)` hardcode (`cantim_mqtt_new.cpp:251`) — cosmetic, local port khác với
   `oscPort` đích, dễ đọc nhầm.
 - CSRF trên `/save`: Basic Auth được trình duyệt tự gắn nên trang bất kỳ có thể POST khi admin
