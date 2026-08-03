@@ -2,7 +2,7 @@
 
 > Dành cho người vận hành thiết bị (không cần biết code). Mô tả toàn bộ tính năng hiện có trên trang cấu hình web của thiết bị.
 
-Cập nhật lần cuối: 2026-08-03 (ô MQTT Password không hiện lại giá trị cũ nữa; thêm tick "Ưu tiên IP tĩnh" trên tab Mạng; thêm cảnh báo MQTT cố định khi 1 sensor OFFLINE).
+Cập nhật lần cuối: 2026-08-03 (ô MQTT Password không hiện lại giá trị cũ nữa; thêm tick "Ưu tiên IP tĩnh" trên tab Mạng; thêm cảnh báo MQTT cố định khi 1 sensor OFFLINE; thêm panel Relay Reset + nút Test Relay).
 
 ---
 
@@ -150,9 +150,29 @@ Nằm ở tab **"Mạng (Ethernet)"** riêng (xem mục 1), không chung tab v�
 
 ---
 
+## 5d. Relay Reset (khi sensor OFFLINE) — (2026-08-03)
+
+Tính năng tự động kích relay để cắt/nối lại nguồn cho các node vệ tinh RS485 khi 1 sensor mất tín hiệu quá lâu — thay cho việc phải mở tủ điện, cắt nguồn tay.
+
+| Trường | Ý nghĩa |
+|---|---|
+| **GPIO 4 / GPIO 5 / GPIO 6 / GPIO 7** | 4 chân cố định trên board, tick chọn chân nào sẽ được dùng để kích relay. **Tick được nhiều chân cùng lúc** — dùng khi 1 chân không đủ dòng để kích relay, gộp nhiều chân lại cho khỏe hơn. Không tick chân nào = **tắt hẳn tính năng này**. |
+| **Kích mức HIGH** | Tick: các chân đã chọn được kéo lên **HIGH** khi kích. Bỏ tick: kéo xuống **LOW** khi kích. Chọn theo đúng loại relay/module đang dùng (module active-HIGH hay active-LOW). |
+| **Thời gian giữ xung (ms)** | Giữ mức đã chọn bao lâu rồi **tự động nhả về mức nghỉ** (không cần can thiệp gì thêm). Tự giới hạn trong khoảng **200 - 30000ms**. |
+
+**Cách hoạt động:** khi 1 sensor đang bật (enable) mất tín hiệu RS485 quá 5 giây (chuyển `OFFLINE`), thiết bị kích các chân đã chọn lên đúng mức đã cấu hình, giữ đúng thời gian "Thời gian giữ xung" rồi tự nhả về mức nghỉ — đúng 1 lần cho mỗi lần sensor rớt (không lặp lại liên tục), và không kích chồng nếu đang giữa 1 lần kích khác (vd 2 sensor cùng rớt gần nhau).
+
+Đổi tick chân hoặc đổi mức HIGH/LOW xong bấm **Save** sẽ áp dụng ngay lập tức, không cần reboot.
+
+**Nút Test Relay** (mục 7 bên dưới) dùng để kích thử thủ công, kiểm tra đấu dây đúng trước khi chờ sự cố thật xảy ra.
+
+⚠️ Đây là tính năng phần cứng thật — sai đấu dây hoặc chọn sai mức HIGH/LOW có thể khiến relay hoạt động không đúng ý muốn. Nên dùng nút **Test Relay** để kiểm tra kỹ trước khi để hệ thống tự vận hành không giám sát.
+
+---
+
 ## 6. Lưu cấu hình
 
-Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên **cả 2 tab** (Sensor + MQTT + OSC + Confirm Time + Admin Auth + Mạng/Ethernet) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Trình duyệt sẽ hỏi username/password (xem mục 0) trước khi thực hiện. Sau khi Save, trang sẽ hiện thông báo:
+Bấm **SAVE SETTINGS** ở cuối form để lưu **toàn bộ** các trường trên **cả 2 tab** (Sensor + MQTT + OSC + Confirm Time + Admin Auth + Relay Reset + Mạng/Ethernet) vào bộ nhớ trong (Preferences/NVS) — giữ nguyên sau khi mất điện/reboot. Trình duyệt sẽ hỏi username/password (xem mục 0) trước khi thực hiện. Sau khi Save, trang sẽ hiện thông báo:
 - **"Saved OK"** — mọi trường lưu thành công.
 - **"Saved with N error(s) - check Serial log"** hoặc **"Save FAILED - NVS not accessible, check Serial log"** — có trường không lưu được, cần xem log Serial (kỹ thuật viên) để biết nguyên nhân.
 - Kèm thêm ghi chú field cụ thể bị từ chối nếu có, ví dụ `(OSC address rejected: must start with /)`, `(MQTT port rejected: must be 1-65535)`, `(sensor min/max rejected: min must be <= max)`, `(Ethernet static IP/gateway/netmask rejected: must be a valid IPv4 address)`.
@@ -165,12 +185,13 @@ Sau khi hiện thông báo, trang tự tải lại.
 
 ## 7. Test Settings
 
-Cả 2 nút Test đều yêu cầu đăng nhập (xem mục 0).
+Cả 3 nút Test đều yêu cầu đăng nhập (xem mục 0).
 
 - **Test MQTT (FULL)** — kích hoạt thủ công hành vi "FULL" (publish MQTT + gửi OSC như khi thật sự đủ người) để kiểm tra kết nối/cấu hình mà không cần đợi người đứng vào vị trí sensor.
 - **Test OSC (FULL)** — hiện tại có cùng hành vi với nút Test MQTT ở trên (đều kích hoạt trạng thái FULL). Nếu cần test riêng trạng thái MISSING, phải đợi sensor thật báo MISSING hoặc yêu cầu bổ sung nút test riêng.
+- **Test Relay** (2026-08-03) — kích thử ngay lập tức các chân đã tick chọn ở panel Relay Reset (mục 5d), giữ đúng "Thời gian giữ xung" rồi tự nhả — dùng để kiểm tra đấu dây relay mà không cần đợi 1 sensor thật rớt mạng.
 
-Sau khi bấm Test, ô trạng thái realtime sẽ phản ánh đúng là đã "publish FULL" (không còn bị lệch/kẹt trạng thái do bấm Test) — nếu ngay sau đó sensor thật báo MISSING, thiết bị sẽ publish MISSING bình thường ở lần chuyển kế tiếp, không bị kẹt chờ một sự kiện không liên quan mới chịu publish.
+Sau khi bấm Test MQTT/Test OSC, ô trạng thái realtime sẽ phản ánh đúng là đã "publish FULL" (không còn bị lệch/kẹt trạng thái do bấm Test) — nếu ngay sau đó sensor thật báo MISSING, thiết bị sẽ publish MISSING bình thường ở lần chuyển kế tiếp, không bị kẹt chờ một sự kiện không liên quan mới chịu publish. Test Relay không đụng gì tới trạng thái FULL/MISSING, chỉ kích GPIO thuần.
 
 ---
 

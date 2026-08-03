@@ -144,6 +144,13 @@ người chỉ tạm rời khỏi sensor trong chốc lát.
 
 **(Mới, F6)** Admin Auth — username/password cho Basic Auth ở trên.
 
+**(Mới, 2026-08-03)** Relay Reset — khi 1 sensor chuyển sang OFFLINE, kích 1 xung GPIO (chọn
+trong 4 chân cố định 4/5/6/7, tick được nhiều chân cùng lúc) để trigger relay cắt/nối lại nguồn
+cho các node vệ tinh RS485, thay thế thao tác cắt nguồn tay. Config lưu Preferences: chân nào
+được tick (`relay_p0..relay_p3`), mức kích HIGH/LOW (`relay_hi`), thời gian giữ xung trước khi
+tự nhả (`relay_ms`, clamp [200, 30000]ms). Không tick chân nào = tắt tính năng. Có nút "Test
+Relay" riêng để kích thử thủ công. Xem `src/relay.h`/`src/relay.cpp`.
+
 Sau khi Save:
 
 * validate từng field, từ chối (không lưu) field không hợp lệ thay vì âm thầm sửa/tràn buffer

@@ -2,6 +2,7 @@
 #include "mqtt.h"
 #include "web.h"
 #include "html.h"
+#include "relay.h"
 #include "sensor_logic.h"
 #include <Arduino.h>
 #include <ETH.h>
@@ -64,6 +65,11 @@ char ethStaticIp[16] = "192.168.99.199";
 char ethStaticGateway[16] = "192.168.99.1";
 char ethStaticNetmask[16] = "255.255.255.0";
 bool ethUseStaticFirst = false;
+
+const uint8_t relayPins[RELAY_PIN_COUNT] = {4, 5, 6, 7};
+bool relayPinEnabled[RELAY_PIN_COUNT] = {false, false, false, false};
+bool relayActiveHigh = true;
+unsigned long relayPulseMs = 3000;
 
 // Diagnostic WiFi AP - broadcasts the current ETH IP as its SSID for a few minutes after
 // boot so an operator can read the device's IP off a phone's WiFi list instead of needing
@@ -198,6 +204,12 @@ void setup()
     ethStaticNetmask[sizeof(ethStaticNetmask) - 1] = '\0';
     ethUseStaticFirst = prefs.getBool(NVS_KEY("eth_first"), false);
 
+    for (int p = 0; p < RELAY_PIN_COUNT; p++) {
+      relayPinEnabled[p] = prefs.getBool(("relay_p" + String(p)).c_str(), relayPinEnabled[p]);
+    }
+    relayActiveHigh = prefs.getBool(NVS_KEY("relay_hi"), relayActiveHigh);
+    relayPulseMs = prefs.getULong(NVS_KEY("relay_ms"), relayPulseMs);
+
     prefs.end();
   }
 
@@ -208,6 +220,8 @@ void setup()
     LOG("AUTH: using default admin credentials (admin/admin) for /save, /test_mqtt, /test_osc - "
         "change via Web UI 'Admin Auth' panel");
   }
+
+  relayInit();
 
   WiFi.onEvent(WiFiEvent);
   spi.begin(ETH_SCK, ETH_MISO, ETH_MOSI, ETH_CS);
@@ -279,6 +293,7 @@ void setup()
   server.on("/save", HTTP_POST, handleSave);
   server.on("/test_mqtt", HTTP_POST, handleTestMQTT);
   server.on("/test_osc", HTTP_POST, handleTestOSC);
+  server.on("/test_relay", HTTP_POST, handleTestRelay);
   server.begin();
   oscUdp.begin(9000);
 
@@ -300,6 +315,7 @@ void loop()
 
   readRS485();
   checkDistance();
+  relayTick();
 }
 
 void readRS485()
@@ -399,6 +415,7 @@ void checkDistance()
       if (!sensorOfflineAlerted[i]) {
         sensorOfflineAlerted[i] = true;
         triggerSensorOffline(i + 1);
+        relayTrigger(); // Kich relay reset nguon cac node ve tinh (no-op neu khong chan nao duoc chon hoac dang giua 1 xung)
       }
       continue;
     }
@@ -527,6 +544,14 @@ int saveDistanceConfig()
   checkStr(prefs.putString(NVS_KEY("eth_gw"), ethStaticGateway), ethStaticGateway, "eth_gw");
   checkStr(prefs.putString(NVS_KEY("eth_mask"), ethStaticNetmask), ethStaticNetmask, "eth_mask");
   checkFixed(prefs.putBool(NVS_KEY("eth_first"), ethUseStaticFirst), "eth_first");
+
+  for (int p = 0; p < RELAY_PIN_COUNT; p++) {
+    String relayKey = "relay_p" + String(p);
+    checkFixed(prefs.putBool(relayKey.c_str(), relayPinEnabled[p]), relayKey.c_str());
+  }
+  checkFixed(prefs.putBool(NVS_KEY("relay_hi"), relayActiveHigh), "relay_hi");
+  checkFixed(prefs.putULong(NVS_KEY("relay_ms"), relayPulseMs), "relay_ms");
+
   checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
 
   prefs.end();

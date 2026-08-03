@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "html.h"
+#include "relay.h"
 #include <Arduino.h>
 
 // F7: escape operator-controlled config values before interpolating them into an HTML
@@ -236,6 +237,34 @@ void handleRoot()
   html += "<div class='note'>Thời gian trạng thái phải giữ ổn định trước khi publish, tách riêng cho FULL và MISSING. Cả 2 giới hạn trong khoảng 50-60000ms.</div>";
   html += "</div>";
   html += "<div class='panel'>";
+  html += "<h3>Relay Reset (khi sensor OFFLINE)</h3>";
+  html += "<div class='row'>";
+  for (int p = 0; p < RELAY_PIN_COUNT; p++) {
+    html += "<div class='field'>";
+    html += "<label><input type='checkbox' name='relay_p";
+    html += p;
+    html += "' value='1'";
+    html += relayPinEnabled[p] ? " checked" : "";
+    html += "> GPIO ";
+    html += relayPins[p];
+    html += "</label>";
+    html += "</div>";
+  }
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label><input type='checkbox' name='relay_active_high' value='1'";
+  html += relayActiveHigh ? " checked" : "";
+  html += "> Kích mức HIGH (bỏ tick = kích mức LOW)</label>";
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label>Thời gian giữ xung (ms)</label>";
+  html += "<input name='relay_ms' value='";
+  html += relayPulseMs;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>Tick chọn chân GPIO (có thể tick nhiều chân cùng lúc để gộp dòng cho relay cần dòng lớn hơn 1 chân cấp được). Khi 1 sensor chuyển sang OFFLINE, các chân đã tick sẽ được kích đúng mức đã chọn trong đúng thời gian này rồi tự nhả về mức nghỉ - dùng để trigger relay cắt/nối lại nguồn cho các node vệ tinh RS485. Không tick chân nào = tắt tính năng này. Giá trị tự giới hạn trong khoảng 200-30000ms.</div>";
+  html += "</div>";
+  html += "<div class='panel'>";
   html += "<h3>Admin Auth</h3>";
   html += "<div class='single'>";
   html += "<label>Username</label>";
@@ -288,6 +317,9 @@ void handleRoot()
   html += "</form>";
   html += "<form action='/test_osc' method='POST'>";
   html += "<input class='btn' type='submit' value='Test OSC (FULL)'>";
+  html += "</form>";
+  html += "<form action='/test_relay' method='POST'>";
+  html += "<input class='btn' type='submit' value='Test Relay'>";
   html += "</form>";
   html += "</div>";
   html += "</div>";

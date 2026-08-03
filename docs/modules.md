@@ -2,7 +2,7 @@
 
 > Bản đồ code cho developer/session sau. Cập nhật **cùng commit** khi thêm file mới hoặc tách file (xem `CLAUDE.md` mục 1-3, mục Documentation Requirements).
 
-Cập nhật lần cuối: 2026-08-03 (thêm cảnh báo MQTT cố định `triggerSensorOffline()` khi 1 sensor rớt RS485).
+Cập nhật lần cuối: 2026-08-03 (thêm module `relay.h`/`relay.cpp` — kích relay reset nguồn node vệ tinh khi sensor OFFLINE).
 
 ---
 
@@ -14,7 +14,8 @@ cantim_mqtt_new.cpp  (setup/loop, đọc RS485, quyết định state)
         ├── globals.h        (extern config/state dùng chung toàn firmware)
         ├── sensor_logic.h/.cpp  (parse dòng RS485, so sánh ngưỡng — pure C++, không phụ thuộc Arduino)
         ├── mqtt.h/.cpp       (MQTT client + gửi OSC)
-        ├── web.h/.cpp        (HTTP handler: /data /save /test_mqtt /test_osc)
+        ├── relay.h/.cpp      (kích relay reset nguồn node vệ tinh qua GPIO)
+        ├── web.h/.cpp        (HTTP handler: /data /save /test_mqtt /test_osc /test_relay)
         └── html.h/.cpp       (render trang cấu hình HTML)
 ```
 
@@ -53,12 +54,13 @@ Header trung tâm — mọi file khác include để dùng chung config/state ru
 - `authUser[32]`, `authPass[32]` — username/password cho HTTP Basic Auth trên `/save`, `/test_mqtt`, `/test_osc` (F6). Mặc định `"admin"`/`"admin"`, log rõ ra Serial mỗi lần boot nếu vẫn còn giá trị mặc định. Load/save qua NVS key `auth_user`/`auth_pass`, sửa qua panel **Admin Auth** trên Web UI (`html.cpp`).
 - `ethStaticIp[16]`, `ethStaticGateway[16]`, `ethStaticNetmask[16]` — địa chỉ IP tĩnh dùng khi DHCP không thành công sau `ETH_WAIT_MS` (F19), hoặc dùng ngay từ đầu nếu `ethUseStaticFirst` bật (xem dưới). Mặc định `192.168.99.199` / gateway `192.168.99.1` / netmask `255.255.255.0`. NVS key `eth_ip`/`eth_gw`/`eth_mask`, load/save đầy đủ, sửa được qua panel **Mạng (Ethernet)** trên Web UI (`html.cpp`) — xem field `eth_ip`/`eth_gw`/`eth_mask` trong `web.cpp::handleSave()`.
 - `ethUseStaticFirst` (bool) — **"Ưu tiên IP tĩnh"** (2026-08-03, port từ project `gia_sach`): bật thì `setup()` áp `ethStaticIp`/`ethStaticGateway`/`ethStaticNetmask` ngay lập tức, bỏ qua hoàn toàn vòng chờ DHCP (`ETH_WAIT_MS`); IP/gateway/netmask parse lỗi thì tự lùi về nhánh DHCP-rồi-fallback cũ, không kẹt. Mặc định `false`. NVS key `eth_first`, sửa qua checkbox cùng tên trên tab Mạng.
+- `RELAY_PIN_COUNT` (4), `relayPins[4]` (`const uint8_t`, giá trị cố định `{4,5,6,7}`, không đổi qua Web UI), `relayPinEnabled[4]` (chân nào được tick), `relayActiveHigh` (true=kích HIGH, false=kích LOW), `relayPulseMs` (thời gian giữ mức kích trước khi tự nhả, clamp `[200,30000]`) (2026-08-03) — cấu hình cho tính năng kích relay reset nguồn node vệ tinh, xem `relay.h`/`relay.cpp` và `checkDistance()` bên dưới. NVS key `relay_p0..relay_p3`/`relay_hi`/`relay_ms`.
 
 **Hàm:** `int saveDistanceConfig()` — định nghĩa trong `cantim_mqtt_new.cpp`, ghi toàn bộ config trên vào Preferences (namespace `"distance"`). Trả về số lượng `put*()` thất bại (0 = OK hết), hoặc `-1` nếu `prefs.begin()` thất bại (chưa ghi được gì) — đổi từ `void` sau F2 để `handleSave()` trong `web.cpp` biết thật sự đã lưu hay chưa.
 
 ---
 
-## `src/cantim_mqtt_new.cpp` (485 dòng) — entry point
+## `src/cantim_mqtt_new.cpp` (~563 dòng, đã vượt soft-cap 400 dòng CLAUDE.md mục 3 — chưa vượt hard cap 600, chưa bắt buộc tách nhưng cân nhắc cho task sau) — entry point
 
 File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `globals.h`), `setup()`, `loop()`, đọc RS485, máy trạng thái FULL/MISSING.
 
@@ -69,12 +71,13 @@ File chính: định nghĩa biến toàn cục thật (khớp `extern` trong `gl
   2. `RS485.begin(...)` trên UART1.
   3. `prefs.begin("distance", false)` (kiểm tra return value — thất bại thì log lỗi, GIỮ default trong RAM, không load) → load toàn bộ config đã liệt kê ở `globals.h` qua key bọc `NVS_KEY(...)` (mỗi field có `getXxx()` tương ứng với `putXxx()` trong `saveDistanceConfig()` — xem lưu ý Bug 1 bên dưới), gồm cả `authUser/authPass` và `ethStaticIp/Gateway/Netmask`. Đối chiếu `cfg_ver` với `CFG_VERSION` (`globals.h`), log cảnh báo nếu cũ/thiếu (không tự xoá). Nếu `authUser`/`authPass` vẫn là default `"admin"`/`"admin"` sau load, log rõ dòng cảnh báo ra Serial mỗi lần boot (F6) — thiết bị KHÔNG bao giờ âm thầm chạy với default không ai biết.
   4. Khởi tạo SPI + Ethernet W5500 (`ETH.begin`). Nếu `ethUseStaticFirst` bật (2026-08-03, "Ưu tiên IP tĩnh") → thử `ETH.config(ip, gw, mask, gw)` áp IP tĩnh **ngay lập tức**, bỏ qua hẳn bước chờ DHCP bên dưới; parse lỗi hoặc `ETH.config()` fail thì log rồi rơi tiếp xuống nhánh DHCP như bình thường (không kẹt). Nhánh DHCP: chờ có IP tối đa `ETH_WAIT_MS = 10000` bằng vòng lặp có timeout dựa trên `millis()` (không phải `while(!eth_connected)` vô hạn — đã fix so với Bug 2 trong spec doc cũ). Hết giờ mà vẫn chưa có IP (không tìm thấy DHCP server) → gọi `ETH.config(ethStaticIp, ethStaticGateway, ethStaticNetmask, ethStaticGateway)` áp IP tĩnh fallback (F19, mặc định `192.168.99.199`/gw `192.168.99.1`/mask `255.255.255.0`; gateway truyền thêm làm DNS1 — F34, trước đó DNS để trống khiến broker nhập bằng hostname không resolve được ở nhánh này), set `eth_connected = true` thủ công (`ETH.config()` không tự bắn `ARDUINO_EVENT_ETH_GOT_IP` — sự kiện đó chỉ tới từ nhánh DHCP-client) rồi tiếp tục boot; nếu vẫn không parse được các địa chỉ static (chuỗi NVS hỏng) thì log lỗi và boot tiếp không mạng, giống hành vi cũ.
-  5. Đăng ký route HTTP (`/`, `/data`, `/save`, `/test_mqtt`, `/test_osc`), `server.begin()`, `oscUdp.begin(9000)`.
+  5. Đăng ký route HTTP (`/`, `/data`, `/save`, `/test_mqtt`, `/test_osc`, `/test_relay`), `server.begin()`, `oscUdp.begin(9000)`.
   6. `mqttInit()`.
-- `loop()`: `server.handleClient()` (chỉ khi `eth_connected`) → kiểm tra tắt Diag AP nếu quá `DIAG_AP_DURATION_MS` (so `millis()`, không block) → `readRS485()` → `checkDistance()`. Không có `delay()` dài, không block.
+  7. `relayInit()` (2026-08-03, `relay.h`) — `pinMode(OUTPUT)` cho 4 chân `relayPins[]` + đưa về mức nghỉ theo `relayActiveHigh` hiện tại. Gọi trước `WiFi.onEvent`/`ETH.begin` trong `setup()`.
+- `loop()`: `server.handleClient()` (chỉ khi `eth_connected`) → kiểm tra tắt Diag AP nếu quá `DIAG_AP_DURATION_MS` (so `millis()`, không block) → `readRS485()` → `checkDistance()` → `relayTick()` (2026-08-03, tự nhả xung relay sau `relayPulseMs`, xem `relay.h`). Không có `delay()` dài, không block.
 - `readRS485()` — đọc byte từ UART1 vào buffer `char[128]` (có kiểm tra tràn, log `"RS485 buffer overflow"` và reset `bufPos` nếu vượt), tách theo `\n`, gọi `parseSensorLine()` (từ `sensor_logic.h`) để tách `id,distance`, ghi vào `rsDistance[]`/`lastRS485[]` qua `isValidDeviceId()`. Thêm inter-byte timeout 200ms (`RS485_INTERBYTE_TIMEOUT_MS`, F27/4.4): nếu byte mới tới cách byte trước đó >200ms trong khi buffer đang có 1 dòng dở (chưa gặp `\n`), coi phần dở đó là "stale" (log rồi drop) trước khi append byte mới, thay vì âm thầm nối nó vào đầu dòng kế tiếp và làm hỏng cả 2 dòng.
 - `checkDistance()` — máy trạng thái debounce:
-  - Đếm số sensor **enabled** đang trong ngưỡng (`isDistanceInRange()`) và chưa timeout (`RS485_TIMEOUT`). Sensor **vừa chuyển** sang timeout (offline) gọi `triggerSensorOffline(i+1)` (`mqtt.cpp`) đúng 1 lần (gate bằng `sensorOfflineAlerted[i]`, xem `globals.h`) trước khi bị loại khỏi `requiredCount`.
+  - Đếm số sensor **enabled** đang trong ngưỡng (`isDistanceInRange()`) và chưa timeout (`RS485_TIMEOUT`). Sensor **vừa chuyển** sang timeout (offline) gọi `triggerSensorOffline(i+1)` (`mqtt.cpp`) **và** `relayTrigger()` (`relay.h`, 2026-08-03) đúng 1 lần (gate bằng `sensorOfflineAlerted[i]`, xem `globals.h`) trước khi bị loại khỏi `requiredCount`. `relayTrigger()` tự no-op nếu không chân relay nào được tick hoặc đang giữa 1 xung khác.
   - `currentState = true` (FULL) chỉ khi **tất cả** sensor enabled đều trong ngưỡng.
   - `activeConfirmTime = currentState ? confirmTime : confirmTimeMissing` (2026-08-03) — MISSING dùng ngưỡng thời gian riêng, mặc định gấp đôi FULL, để giảm khả năng bắn nhầm MISSING khi người chỉ tạm rời sensor trong chốc lát.
   - Có nhánh `startupWaiting` riêng cho lần đầu sau boot (chờ `activeConfirmTime` ổn định trước khi publish state đầu tiên), sau đó chuyển sang nhánh debounce thường: đổi state → reset `stateTimer`; giữ ổn định đủ `activeConfirmTime` ms **và** `currentState != publishedState` → gọi `triggerFull()`/`triggerMissing()` một lần, rồi set `publishedState = currentState` (`actionDone` vẫn chặn gọi lặp trong cùng 1 lần ổn định; `publishedState` chặn thêm trường hợp nhiễu raw quanh ngưỡng làm `actionDone` bị reset dù chưa có gì mới để publish — finding 4.1). Cả 2 nhánh (`startupWaiting` và steady-state) đều ghi `publishedState`.
@@ -109,7 +112,25 @@ MQTT client (ESP-IDF `esp_mqtt_client`, không phải PubSubClient) + gửi gói
 
 ---
 
-## `src/web.h` + `src/web.cpp` (6 + 387 dòng)
+## `src/relay.h` + `src/relay.cpp` (2026-08-03)
+
+Module điều khiển GPIO thuần (không phụ thuộc MQTT/Web) — kích 1 xung trên các chân đã tick
+chọn để trigger relay cắt/nối nguồn cho các node vệ tinh RS485 khi 1 sensor báo OFFLINE, thay
+thế thao tác "mở tủ, cắt nguồn tay" (xem `docs/user-take-note/project-spec-v1.md` §6). Biến
+config (`relayPins[]`, `relayPinEnabled[]`, `relayActiveHigh`, `relayPulseMs`) khai báo `extern`
+ở `globals.h`, định nghĩa + load/save NVS tập trung ở `cantim_mqtt_new.cpp` (đúng pattern mọi
+field config khác trong project này) — file này chỉ chứa logic điều khiển chân.
+
+- `relayInit()` — `pinMode(OUTPUT)` cho cả 4 chân + đưa về mức nghỉ (`idleLevel()`). Gọi 1 lần trong `setup()`.
+- `relaySyncIdleLevel()` — áp lại mức nghỉ cho cả 4 chân, bỏ qua (không làm gì) nếu đang giữa 1 xung thật (`relayPulseActive`). Gọi từ `web.cpp::handleSave()` ngay sau khi cập nhật `relayPinEnabled[]`/`relayActiveHigh` — cần thiết vì đổi `relayActiveHigh` giữa chừng làm định nghĩa "mức nghỉ" đảo ngược, không sync lại thì 1 chân đang nghỉ theo định nghĩa cũ sẽ hoá thành đang kích theo định nghĩa mới mà không có xung nào chạy qua để tự sửa.
+- `relayTrigger()` — kích mức `activeLevel()` lên các chân có `relayPinEnabled[p] == true`, bắt đầu đếm `relayPulseStartMs`. No-op nếu không chân nào được tick, hoặc đang giữa 1 xung khác (`relayPulseActive`) — tránh xung chồng xung khi nhiều sensor cùng báo offline gần nhau (không kéo dài thời gian xung, không kích lại từ đầu).
+- `relayTick()` — gọi mỗi vòng `loop()`; nếu đang giữa xung và đã quá `relayPulseMs` thì đưa cả 4 chân về mức nghỉ, tắt `relayPulseActive`.
+
+Gọi `relayTrigger()` từ `checkDistance()` (`cantim_mqtt_new.cpp`) cùng chỗ với `triggerSensorOffline()`, và từ `handleTestRelay()` (`web.cpp`) cho nút Test Relay trên Web UI.
+
+---
+
+## `src/web.h` + `src/web.cpp` (7 + ~457 dòng, đã vượt soft-cap 400 dòng CLAUDE.md mục 3)
 
 HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, `mqttInit()`, `triggerFull()`), **không** tự chứa business logic tính toán.
 
@@ -127,15 +148,17 @@ HTTP handler — nhận request, gọi logic có sẵn (`saveDistanceConfig()`, 
   - `mqtt_pass` (F32, 2026-08-03) — chỉ ghi đè khi non-empty, cùng pattern "để trống = giữ nguyên" với `auth_pass` (xem `html.cpp` bên dưới: ô này không còn hiện lại giá trị đã lưu nữa).
   - `eth_ip`/`eth_gw`/`eth_mask` — panel **Mạng (Ethernet)** trên Web UI, ghi vào `ethStaticIp`/`ethStaticGateway`/`ethStaticNetmask` (F19 static-IP fallback). Validate bằng `IPAddress::fromString()`, reject (không lưu) nếu không parse được thành IPv4 hợp lệ — cùng pattern "validate trước khi copy" với các field text khác.
   - `eth_static_first` (checkbox, 2026-08-03) — đọc qua `server.hasArg(...)` giống các checkbox khác (`mqtt_enable`, `osc_enable`), ghi thẳng vào `ethUseStaticFirst`.
+  - `relay_p0..relay_p3` (checkbox, 2026-08-03) — chân nào được tick trên panel "Relay Reset", ghi vào `relayPinEnabled[]`. `relay_active_high` (checkbox) → `relayActiveHigh`. `relay_ms` — **clamp** (không reject) vào `[200, 30000]` → `relayPulseMs`, cùng kiểu xử lý với `confirm`/`confirm_miss` (F15). Sau khi cập nhật 2 field trên, gọi `relaySyncIdleLevel()` (`relay.h`) ngay lập tức để áp lại mức nghỉ theo cấu hình MỚI trước khi `saveDistanceConfig()` — quan trọng vì đổi `relay_active_high` giữa chừng đảo ngược định nghĩa "mức nghỉ" (xem `relay.cpp`).
   Nếu MQTT server/port/user/pass đổi → restart MQTT client (`esp_mqtt_client_stop/destroy` rồi `mqttInit()` lại), và set `mqttConnected = false` ngay sau destroy (4.8 — destroy không tự bắn `MQTT_EVENT_DISCONNECTED` nên UI sẽ kẹt ở "CONNECTED" nếu không set tay). Phản hồi JS `alert(...)` dựa trên số lỗi `saveDistanceConfig()` trả về (F2) — "Saved OK" chỉ khi thật sự 0 lỗi, ngược lại báo số lỗi hoặc "Save FAILED", cộng thêm ghi chú field nào bị reject nếu có (OSC address / MQTT port / OSC port / sensor min-max).
 - `syncStateMachineAfterTestTrigger()` (static) — 4.6: set `lastState = publishedState = actionDone = true` + reset `stateTimer`, gọi sau khi Test button fire `triggerFull()`. Trước fix, bấm Test trong lúc máy đang ở MISSING khiến `checkDistance()` vẫn nghĩ "đã publish MISSING" (không hề biết vừa test-publish FULL) và giữ `actionDone=true` cho state cũ — receiver kẹt ở FULL cho tới lần chuyển trạng thái thật kế tiếp.
 - `handleTestMQTT()` / `handleTestOSC()` — POST, cũng yêu cầu `requireAuth()` (F6). Gọi `triggerFull()` để test thủ công rồi `syncStateMachineAfterTestTrigger()` (cả 2 handler vẫn cùng gọi `triggerFull()`, chưa có nhánh test riêng MISSING — xem ghi chú audit bên dưới, KHÔNG đổi trong cluster này).
+- `handleTestRelay()` (2026-08-03) — POST, yêu cầu `requireAuth()` (F6). Gọi thẳng `relayTrigger()` (`relay.h`) để kích thử relay thủ công — không đụng state machine FULL/MISSING (khác với 2 handler test ở trên), vì đây chỉ là test phần cứng GPIO/relay, không liên quan occupancy.
 
 ⚠️ **Ghi chú audit (chưa fix, chưa xác nhận có phải bug hay cố ý):** `handleTestOSC()` gọi `triggerFull()` giống hệt `handleTestMQTT()` thay vì hàm test OSC riêng — 2 nút test hiện có hành vi giống nhau. Cần hỏi lại chủ dự án trước khi đổi hành vi.
 
 ---
 
-## `src/html.h` + `src/html.cpp` (3 + 287 dòng)
+## `src/html.h` + `src/html.cpp` (3 + ~329 dòng)
 
 Frontend thuần render — không có quyết định nghiệp vụ, chỉ đọc biến config/state đã có sẵn để build chuỗi HTML.
 
@@ -146,9 +169,10 @@ Frontend thuần render — không có quyết định nghiệp vụ, chỉ đ�
   - Panel **MQTT Settings** — enable, IP, port, user, password, topic, FULL/MISSING message. **(F32, 2026-08-03)** ô Password không còn `value=htmlEscape(mqttPass)` — chỉ còn `placeholder`, không render giá trị đã lưu (trang `/` không qua `requireAuth()` nên trước fix ai vào được LAN cũng đọc được password broker bằng View Source/curl); để trống khi Save = giữ nguyên (xem `web.cpp::handleSave`).
   - Panel **OSC Settings** — enable, IP, port, FULL/MISSING address + value.
   - Panel **Confirm Settings** — 2 ô debounce riêng (2026-08-03): `confirm` (FULL) và `confirm_miss` (MISSING, mặc định gấp đôi FULL).
+  - Panel **Relay Reset (khi sensor OFFLINE)** (2026-08-03) — 4 checkbox `relay_p0..relay_p3` (nhãn "GPIO 4/5/6/7", tick được nhiều chân cùng lúc để gộp dòng cho relay cần dòng lớn), checkbox `relay_active_high` ("Kích mức HIGH", bỏ tick = LOW), ô số `relay_ms` (thời gian giữ xung, ms). Không tick chân nào = tắt tính năng.
   - Panel **Admin Auth** (mới, F6) — username hiển thị giá trị hiện tại (qua `htmlEscape()`), password luôn render rỗng (`value=''`) để không lộ pass hiện tại qua View Source; để trống 1 trong 2 field khi Save nghĩa là giữ nguyên giá trị cũ (xem `web.cpp::handleSave`).
   - **Tab "Mạng (Ethernet)"** — panel riêng (`#tab-network`, JS `showTab()` chuyển đổi 2 div `.tab-content` bằng class `active`, không reload trang) chứa checkbox **`eth_static_first`** ("Ưu tiên IP tĩnh", 2026-08-03, đọc `ethUseStaticFirst`) cộng `eth_ip`/`eth_gw`/`eth_mask` (F19 static-IP fallback / F34 DNS). Cùng 1 `<form action='/save'>` với tab "Cấu hình" — nút SAVE SETTINGS lưu cả 2 tab 1 lần, bất kể tab nào đang active.
-  - Nút **SAVE SETTINGS** (POST `/save`), **Test MQTT** / **Test OSC** (POST `/test_mqtt` / `/test_osc`) — cả 3 route này giờ yêu cầu HTTP Basic Auth (F6, xem `web.cpp::requireAuth`), trình duyệt sẽ tự hỏi lại nếu chưa đăng nhập trong session.
+  - Nút **SAVE SETTINGS** (POST `/save`), **Test MQTT** / **Test OSC** / **Test Relay** (POST `/test_mqtt` / `/test_osc` / `/test_relay`) — cả 4 route này giờ yêu cầu HTTP Basic Auth (F6, xem `web.cpp::requireAuth`), trình duyệt sẽ tự hỏi lại nếu chưa đăng nhập trong session.
   - Div `#d` (trạng thái realtime) được JS `fetch('/data')` cập nhật mỗi 100ms — route `/data` KHÔNG yêu cầu auth (chỉ đọc).
 
 ---

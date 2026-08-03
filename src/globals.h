@@ -122,6 +122,17 @@ extern char ethStaticNetmask[16];
 // IP/gateway/netmask don't parse, so a bad entry here never gets the device stuck.
 extern bool ethUseStaticFirst;
 
+// --- Relay reset khi sensor OFFLINE (2026-08-03) -----------------------------------------
+// Kich 1 xung GPIO de dieu khien relay cat/noi nguon dien cua cac node ve tinh RS485, thay
+// the thao tac "mo tu, cat nguon tay" khi 1 sensor rot mang qua lau. 4 chan GPIO CO DINH
+// (khong doi duoc qua Web UI, chi tick chon dung/khong dung chan nao) - ho tro tick nhieu
+// chan cung luc de gop dong nguon cho relay can dong lon hon 1 GPIO cap duoc.
+#define RELAY_PIN_COUNT 4
+extern const uint8_t relayPins[RELAY_PIN_COUNT];  // GPIO 4,5,6,7 co dinh
+extern bool relayPinEnabled[RELAY_PIN_COUNT];     // Chan nao duoc tick chon tren Web UI
+extern bool relayActiveHigh;                       // true = kich muc HIGH, false = kich muc LOW
+extern unsigned long relayPulseMs;                 // Giu muc kich bao lau (ms) truoc khi tu nha ve muc nghi
+
 // Returns the number of failed put*() calls (0 = fully saved), or -1 if
 // prefs.begin() itself failed (namespace could not be opened, nothing was written).
 int saveDistanceConfig();

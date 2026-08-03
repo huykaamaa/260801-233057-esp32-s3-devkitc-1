@@ -2,6 +2,7 @@
 #include "mqtt.h"
 #include "web.h"
 #include "html.h"
+#include "relay.h"
 #include <Arduino.h>
 #include <cstring>
 
@@ -313,6 +314,30 @@ void handleSave() {
 
   ethUseStaticFirst = server.hasArg("eth_static_first");
 
+  for (int p = 0; p < RELAY_PIN_COUNT; p++) {
+    relayPinEnabled[p] = server.hasArg("relay_p" + String(p));
+  }
+  relayActiveHigh = server.hasArg("relay_active_high");
+
+  // Clamp thay vi reject, giong pattern "confirm"/"confirm_miss" o tren - xung qua ngan
+  // (< 200ms) co the khong du de relay/nguon thuc su ngat-noi lai, qua dai (> 30s) khong
+  // sai nhung khong co ich, chan lai de tranh nhap nham so 0 hoac so am.
+  if (server.hasArg("relay_ms")) {
+    long v = server.arg("relay_ms").toInt();
+    if (v < 200) {
+      v = 200;
+    } else if (v > 30000) {
+      v = 30000;
+    }
+    relayPulseMs = (unsigned long)v;
+  }
+
+  // Ap lai muc nghi ngay theo cau hinh MOI (pin duoc chon / active-high vua doi) - tranh
+  // truong hop doi active-high/low xong 1 chan dang "nghi" theo dinh nghia cu lai thanh
+  // "kich" theo dinh nghia moi ma khong co xung nao chay qua de tu sua. Khong lam gi neu
+  // dang giua 1 xung that (xem relay.cpp).
+  relaySyncIdleLevel();
+
   int saveFailCount = saveDistanceConfig();
 
   if (needRestartMQTT) {
@@ -407,6 +432,21 @@ void handleTestOSC() {
   LOG(">>> TEST OSC <<<");
   triggerFull();
   syncStateMachineAfterTestTrigger();
+  server.send(
+    200,
+    "text/html",
+    "<script>"
+    "window.location.href='/';"
+    "</script>"
+  );
+}
+
+void handleTestRelay() {
+  if (!requireAuth()) {  // F6
+    return;
+  }
+  LOG(">>> TEST RELAY <<<");
+  relayTrigger();
   server.send(
     200,
     "text/html",
