@@ -138,6 +138,9 @@ OSC:
 * OSC Port (validate 1-65535, F16)
 
 Confirm Time (ms) — clamp vào khoảng [50, 60000] thay vì nhận nguyên giá trị nhập (F15).
+**(Mới, 2026-08-03)** Tách riêng thành `confirm` (FULL) và `confirm_miss` (MISSING, mặc định
+2000ms = gấp đôi FULL) — MISSING cần giữ ổn định lâu hơn để giảm khả năng bắn cue nhầm khi
+người chỉ tạm rời khỏi sensor trong chốc lát.
 
 **(Mới, F6)** Admin Auth — username/password cho Basic Auth ở trên.
 

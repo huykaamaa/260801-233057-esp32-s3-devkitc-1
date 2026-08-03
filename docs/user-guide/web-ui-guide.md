@@ -103,9 +103,12 @@ FULL và MISSING có thể dùng **cùng 1 address với giá trị khác nhau**
 
 | Trường | Ý nghĩa |
 |---|---|
-| **Confirm Time (ms)** | Thời gian (mili-giây) trạng thái phải giữ ổn định liên tục trước khi thiết bị mới publish MQTT/OSC. Mặc định 1000ms (1 giây). Giá trị nhập vào tự động giới hạn trong khoảng **50 - 60000ms** (nhập ngoài khoảng này sẽ tự kéo về giá trị gần nhất trong khoảng, không bị từ chối). |
+| **Confirm Time - FULL (ms)** | Thời gian (mili-giây) trạng thái phải giữ ổn định liên tục trước khi thiết bị publish **FULL**. Mặc định 1000ms (1 giây). |
+| **Confirm Time - MISSING (ms)** | Thời gian giữ ổn định riêng trước khi publish **MISSING** (2026-08-03, tách riêng khỏi FULL). Mặc định 2000ms (2 giây) — cố ý lâu hơn FULL để giảm khả năng bắn nhầm MISSING khi người chỉ tạm rời khỏi sensor trong chốc lát. |
 
-Dùng để chống nhiễu (debounce): nếu người đứng gần ranh giới ngưỡng khiến trạng thái nhấp nháy FULL/MISSING liên tục, tăng giá trị này để chờ ổn định lâu hơn rồi mới publish, tránh spam MQTT/OSC.
+Cả 2 giá trị nhập vào tự động giới hạn trong khoảng **50 - 60000ms** (nhập ngoài khoảng này sẽ tự kéo về giá trị gần nhất trong khoảng, không bị từ chối).
+
+Dùng để chống nhiễu (debounce): nếu người đứng gần ranh giới ngưỡng khiến trạng thái nhấp nháy FULL/MISSING liên tục, tăng giá trị tương ứng để chờ ổn định lâu hơn rồi mới publish, tránh spam MQTT/OSC. Muốn thiết bị "nhạy" báo FULL nhưng "chậm rãi" báo MISSING (vd tránh mất cue khi người đứng lên tạm thời) — giữ FULL thấp, tăng MISSING lên.
 
 ---
 

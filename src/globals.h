@@ -99,6 +99,7 @@ extern unsigned long stateTimer;
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;
+extern unsigned long confirmTimeMissing;   // Thời gian xác nhận riêng cho MISSING (mặc định = confirmTime * 2)
 extern bool eth_connected;
 
 // --- Ethernet static-IP fallback (F19) ---------------------------------------------------

@@ -245,6 +245,18 @@ void handleSave() {
     confirmTime = (unsigned long)v;
   }
 
+  // Same clamp rule as "confirm" above - separate confirm time used only when the
+  // sensor is settling into MISSING (see checkDistance() in cantim_mqtt_new.cpp).
+  if (server.hasArg("confirm_miss")) {
+    long v = server.arg("confirm_miss").toInt();
+    if (v < 50) {
+      v = 50;
+    } else if (v > 60000) {
+      v = 60000;
+    }
+    confirmTimeMissing = (unsigned long)v;
+  }
+
   if (server.hasArg("auth_user") && server.arg("auth_user").length() > 0) {
     strncpy(authUser, server.arg("auth_user").c_str(), sizeof(authUser) - 1);
     authUser[sizeof(authUser) - 1] = '\0';

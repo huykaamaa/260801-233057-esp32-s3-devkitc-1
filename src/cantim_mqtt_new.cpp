@@ -50,6 +50,7 @@ bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho 
 bool publishedState = false;        // Trạng thái đã thực sự trigger/publish lần gần nhất (khác lastState!)
 unsigned long stateTimer = 0;        // Thời gian bắt đầu xác nhận trạng thái
 unsigned long confirmTime = 500;     // ms đợi xác nhận thay đổi trạng thái
+unsigned long confirmTimeMissing = 1000; // ms đợi xác nhận riêng cho MISSING
 bool eth_connected = false;         // Trạng thái kết nối Ethernet
 
 // F19 static-IP fallback defaults - same /24 as this firmware's other hardcoded LAN
@@ -179,6 +180,7 @@ void setup()
     oscValueMissing = prefs.getInt(NVS_KEY("osc_value_miss"), 0);
 
     confirmTime = prefs.getULong(NVS_KEY("confirm"), 1000);
+    confirmTimeMissing = prefs.getULong(NVS_KEY("confirm_miss"), 2000);
 
     strncpy(authUser, prefs.getString(NVS_KEY("auth_user"), "admin").c_str(), sizeof(authUser) - 1);
     authUser[sizeof(authUser) - 1] = '\0';
@@ -398,6 +400,10 @@ void checkDistance()
 
   bool currentState = (requiredCount > 0 && countOK == requiredCount);
 
+  // MISSING dùng confirmTimeMissing riêng (mặc định = confirmTime * 2) - cấu hình được qua
+  // Web UI, không cố định x2 cứng để tránh publish MISSING nhầm khi người tạm rời sensor.
+  unsigned long activeConfirmTime = currentState ? confirmTime : confirmTimeMissing;
+
   if (startupWaiting) {
     if (!startupStateInitialized) {
       startupState = currentState;
@@ -406,7 +412,7 @@ void checkDistance()
     } else if (currentState != startupState) {
       startupState = currentState;
       startupStateTimer = millis();
-    } else if (millis() - startupStateTimer >= confirmTime) {
+    } else if (millis() - startupStateTimer >= activeConfirmTime) {
       startupWaiting = false;
       lastState = currentState;
       stateTimer = millis();
@@ -430,7 +436,7 @@ void checkDistance()
     actionDone = false;
   }
 
-  if (millis() - stateTimer >= confirmTime) {
+  if (millis() - stateTimer >= activeConfirmTime) {
     if (!actionDone) {
       // Chỉ publish nếu trạng thái đã xác nhận (currentState) khác trạng thái đã publish
       // lần gần nhất - tránh trường hợp raw signal rung (jitter) làm lastState/actionDone
@@ -501,6 +507,7 @@ int saveDistanceConfig()
   checkFixed(prefs.putInt(NVS_KEY("osc_value_full"), oscValueFull), "osc_value_full");
   checkFixed(prefs.putInt(NVS_KEY("osc_value_miss"), oscValueMissing), "osc_value_miss");
   checkFixed(prefs.putULong(NVS_KEY("confirm"), confirmTime), "confirm");
+  checkFixed(prefs.putULong(NVS_KEY("confirm_miss"), confirmTimeMissing), "confirm_miss");
   checkStr(prefs.putString(NVS_KEY("auth_user"), authUser), authUser, "auth_user");
   checkStr(prefs.putString(NVS_KEY("auth_pass"), authPass), authPass, "auth_pass");
   checkStr(prefs.putString(NVS_KEY("eth_ip"), ethStaticIp), ethStaticIp, "eth_ip");
