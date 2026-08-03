@@ -17,6 +17,27 @@ export PATH="$HOME/.platformio/penv/Scripts:$PATH"
 
 (PowerShell: `$env:Path = "$env:USERPROFILE\.platformio\penv\Scripts;$env:Path"`)
 
+⚠️ **LUÔN set encoding UTF-8 trước MỌI lệnh `pio` có upload/monitor (không chỉ build suông)** —
+console Windows mặc định dùng codepage `cp1252`, còn esptool/PlatformIO in progress bar bằng
+ký tự Unicode (`█░`). Không set thì:
+- `pio run` (build suông) chỉ mất bảng RAM/Flash đẹp, in dòng "Firmware metrics can not be
+  shown" — vô hại, bỏ qua được.
+- `pio run -t upload` / `pio device monitor` thì **crash thật giữa chừng khi đang ghi flash**:
+  thread đọc output của PlatformIO chết vì `UnicodeEncodeError` lúc gặp ký tự progress bar,
+  pipe bị nghẽn, tiến trình con esptool treo chờ (không thoát), rồi bị agent/timeout kill —
+  board có thể đang ở trạng thái flash dở dang lúc đó. Đã xảy ra thật ngày 2026-08-03, xem
+  `memory/esptool-utf8-console-crash-2026-08-03.md`.
+
+Set 1 lần đầu session (áp dụng cho mọi lệnh `pio` sau đó trong cùng bash session):
+
+```bash
+export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
+```
+
+(PowerShell: `$env:PYTHONIOENCODING = "utf-8"; $env:PYTHONUTF8 = "1"` — hoặc `chcp 65001` đổi
+codepage cả console.)
+
 ## 0. Trước khi build — build ÍT nhất có thể
 
 - Sửa `docs/`, `CLAUDE.md`, comment-only → **không build**.
@@ -37,8 +58,9 @@ user trừ khi thay đổi đáng kể so với baseline ~14%/~35%).
 
 Build lỗi → tìm dòng `error:`, báo tối đa 5 lỗi đầu kèm `file:line:col`, đừng dán nguyên log.
 
-Upload lên board (USB CDC, `upload_port = auto` trong `platformio.ini` — không cần chỉ định
-COM port trừ khi auto-detect fail):
+Upload lên board (USB CDC, `platformio.ini` không khai báo `upload_port`/`monitor_port` nên
+PlatformIO tự dò cổng — xem `memory/esptool-upload-port-auto-2026-08-03.md` về lý do KHÔNG
+gán `upload_port = auto` bằng tay, chuỗi đó bị hiểu là tên port thật chứ không phải auto-detect):
 
 ```bash
 pio run -e esp32-s3-devkitc-1 -t upload
