@@ -2,7 +2,7 @@
 
 > Dành cho người vận hành thiết bị (không cần biết code). Mô tả toàn bộ tính năng hiện có trên trang cấu hình web của thiết bị.
 
-Cập nhật lần cuối: 2026-08-03 (ô MQTT Password không hiện lại giá trị cũ nữa; thêm tick "Ưu tiên IP tĩnh" trên tab Mạng).
+Cập nhật lần cuối: 2026-08-03 (ô MQTT Password không hiện lại giá trị cũ nữa; thêm tick "Ưu tiên IP tĩnh" trên tab Mạng; thêm cảnh báo MQTT cố định khi 1 sensor OFFLINE).
 
 ---
 
@@ -74,6 +74,12 @@ Giá trị mặc định (khi chưa từng Save lần nào): MIN = 200mm, MAX = 
 **Lưu ý:** đổi IP/Port/Username/Password và bấm **Save** sẽ khiến thiết bị **kết nối lại MQTT ngay lập tức** (mất kết nối cũ, tạo kết nối mới với thông tin vừa nhập). Đổi Topic/FULL Message/MISSING Message thì không cần kết nối lại, áp dụng ngay cho lần publish kế tiếp.
 
 **MQTT Port** phải là số nguyên từ 1 đến 65535 — nhập sai định dạng hoặc ngoài khoảng này sẽ **bị từ chối, không lưu** (báo lỗi trong thông báo sau khi Save), port cũ vẫn giữ nguyên.
+
+**Cảnh báo sensor OFFLINE (2026-08-03):** khi 1 sensor đang bật (enable) mất tín hiệu RS485 quá 5 giây (chuyển sang `OFFLINE`), thiết bị tự publish **1 MQTT message riêng, nội dung cố định** (không cấu hình được qua Web UI):
+- Topic: `<MQTT Topic>/error` (vd Topic đang là `sensor/people` → cảnh báo gửi vào `sensor/people/error`).
+- Payload: `SENSOR_<số thứ tự>_OFFLINE` (vd `SENSOR_2_OFFLINE` nếu sensor 2 rớt).
+
+Chỉ gửi **đúng 1 lần** tại thời điểm sensor vừa chuyển sang OFFLINE (không lặp lại mỗi vòng loop); nếu sensor online trở lại rồi rớt lại lần nữa, cảnh báo sẽ gửi lại. Đây là kênh báo lỗi kỹ thuật, tách riêng khỏi topic FULL/MISSING để không bị hiểu nhầm thành 1 giá trị occupancy.
 
 ---
 

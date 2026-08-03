@@ -92,6 +92,7 @@ extern char authPass[32];
 extern int rsDistance[DEVICE_NUM];
 extern unsigned long lastRS485[DEVICE_NUM];
 extern bool sensorEnabled[DEVICE_NUM];
+extern bool sensorOfflineAlerted[DEVICE_NUM]; // Da gui MQTT canh bao OFFLINE cho sensor nay trong lan mat tin hieu hien tai chua
 extern bool lastState;
 extern bool actionDone;
 extern bool publishedState;          // Trạng thái đã thực sự publish (MQTT/OSC) lần gần nhất

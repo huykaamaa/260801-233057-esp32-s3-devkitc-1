@@ -45,6 +45,7 @@ char authPass[32] = "admin";  // Web UI Basic Auth password (F6) - change via Ad
 int rsDistance[DEVICE_NUM];         // Khoảng cách hiện tại của mỗi sensor
 unsigned long lastRS485[DEVICE_NUM]; // Thời điểm nhận dữ liệu cuối từ sensor
 bool sensorEnabled[DEVICE_NUM] = {true, true, true};
+bool sensorOfflineAlerted[DEVICE_NUM] = {false, false, false}; // Da gui MQTT canh bao OFFLINE chua (reset khi online lai)
 int distanceMin[DEVICE_NUM] = {200, 200, 200}; // Ngưỡng min của mỗi sensor
 int distanceMax[DEVICE_NUM] = {800, 800, 800}; // Ngưỡng max của mỗi sensor
 bool lastState = false;             // Trạng thái đầy/vắng trước đó (raw, dùng để debounce)
@@ -393,8 +394,15 @@ void checkDistance()
     // các sensor còn lại đang online và đúng ngưỡng. Sensor online trở lại tự động được tính
     // lại vào requiredCount ở lần loop kế tiếp.
     if (millis() - lastRS485[i] > RS485_TIMEOUT) {
+      // Cạnh online -> offline: bắn cảnh báo MQTT đúng 1 lần lúc mới rớt, không lặp lại
+      // mỗi vòng loop cho tới khi sensor này online trở lại (reset flag bên dưới).
+      if (!sensorOfflineAlerted[i]) {
+        sensorOfflineAlerted[i] = true;
+        triggerSensorOffline(i + 1);
+      }
       continue;
     }
+    sensorOfflineAlerted[i] = false;
 
     requiredCount++;
     int d = rsDistance[i];

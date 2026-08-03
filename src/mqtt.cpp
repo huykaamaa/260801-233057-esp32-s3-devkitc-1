@@ -131,6 +131,31 @@ void triggerMissing() {
   sendOscState(oscAddressMissing, oscValueMissing);
 }
 
+void triggerSensorOffline(int deviceId) {
+  // Topic/payload co dinh (khong qua Web UI/NVS) - chi la 1 canh bao ky thuat, khong
+  // phai trang thai occupancy nen KHONG dung chung topic voi FULL/MISSING (mqttTopic)
+  // de tranh consumer phia duoi hieu nham la 1 gia tri occupancy thu 3.
+  char topicBuf[80];
+  snprintf(topicBuf, sizeof(topicBuf), "%s/error", mqttTopic);
+
+  char payloadBuf[32];
+  snprintf(payloadBuf, sizeof(payloadBuf), "SENSOR_%d_OFFLINE", deviceId);
+
+  LOG("Sensor %d OFFLINE - gui canh bao MQTT (%s -> %s)", deviceId, topicBuf, payloadBuf);
+  if (mqttEnabled) {
+    if (mqtt && mqttConnected) {
+      // Xem triggerFull() ve ly do dung enqueue() thay vi publish() (F14/4.2).
+      esp_mqtt_client_enqueue(mqtt, topicBuf, payloadBuf, 0, 0, 0, true);
+    } else if (mqtt) {
+      LOG("MQTT publish skipped: not connected");
+    } else {
+      LOG("MQTT publish skipped: client not initialized");
+    }
+  } else {
+    LOG("MQTT publish skipped: disabled by config");
+  }
+}
+
 void mqttEvent(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
   switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
