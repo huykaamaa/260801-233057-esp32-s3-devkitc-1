@@ -145,7 +145,12 @@ void handleSave() {
     mqttEnabled = false;
   }
 
-  if (server.hasArg("mqtt_pass")) {
+  // F32: the form no longer echoes the saved password back into HTML (see A1 in
+  // docs/todo/audit-tu-gia-sach-2026-08-03.md - reading it back via View Source/curl
+  // let anyone on the LAN read the broker password off the unauthenticated "/" page),
+  // so an empty submit here means "field left blank", not "clear the password" -
+  // same "blank = keep current" rule already used for auth_pass above.
+  if (server.hasArg("mqtt_pass") && server.arg("mqtt_pass").length() > 0) {
     strncpy(mqttPass, server.arg("mqtt_pass").c_str(), sizeof(mqttPass) - 1);
     mqttPass[sizeof(mqttPass) - 1] = '\0';
     needRestartMQTT = true;

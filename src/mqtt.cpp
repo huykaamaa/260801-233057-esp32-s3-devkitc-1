@@ -65,12 +65,16 @@ void mqttInit() {
   static char client_id[] = "CAN_TIM";
   config.credentials.client_id = client_id;
 
+  // F32: the Web UI Password field no longer round-trips the saved value (blank submit =
+  // keep current, see web.cpp handleSave), so there is no way to clear mqttPass back to ""
+  // through that field anymore. Tying password-sending to username instead gives the
+  // operator an escape hatch: clearing Username switches the broker connection fully
+  // anonymous (no username, no password sent), even if a password is still stored in NVS.
   if (strlen(mqttUser) > 0) {
     config.credentials.username = mqttUser;
-  }
-
-  if (strlen(mqttPass) > 0) {
-    config.credentials.authentication.password = mqttPass;
+    if (strlen(mqttPass) > 0) {
+      config.credentials.authentication.password = mqttPass;
+    }
   }
 
   mqtt = esp_mqtt_client_init(&config);

@@ -152,10 +152,8 @@ void handleRoot()
   html += "'>";
   html += "</div>";
   html += "<div class='single'>";
-  html += "<label>Password</label>";
-  html += "<input type='password' name='mqtt_pass' value='";
-  html += htmlEscape(mqttPass);
-  html += "'>";
+  html += "<label>Password (để trống = giữ nguyên)</label>";
+  html += "<input type='password' name='mqtt_pass' placeholder='(giữ nguyên nếu để trống)'>";
   html += "</div>";
   html += "<div class='single'>";
   html += "<label>MQTT Topic</label>";
