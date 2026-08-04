@@ -4,6 +4,7 @@
 #include "html.h"
 #include "relay.h"
 #include <Arduino.h>
+#include <Update.h>
 #include <cstring>
 
 // F6: gate state-changing endpoints (/save, /test_mqtt, /test_osc) behind HTTP Basic Auth.
@@ -34,6 +35,7 @@ static bool parseValidatedLong(const String& s, long minVal, long maxVal, long& 
 
 void handleData() {
   String data;
+  data += "<span style='font-size:12px;color:#94a3b8'>Firmware build: " __DATE__ " " __TIME__ "</span><br>";
   data += "<b>MQTT:</b> ";
   if (!mqttEnabled) {
     data += "<span style='color:gray'>DISABLED</span>";
@@ -454,4 +456,56 @@ void handleTestRelay() {
     "window.location.href='/';"
     "</script>"
   );
+}
+
+// true trong suot 1 request /update tu luc auth duoc kiem tra (o buoc START) - dung chung giua
+// handleUpdateUpload() (goi nhieu lan trong luc nhan tung chunk) va handleUpdateFinish() (goi 1
+// lan sau khi nhan xong) vi Auth chi kiem tra duoc 1 lan luc bat dau, khong the goi lai
+// requireAuth() o giua chung (header da xu ly xong).
+static bool otaAuthOk = false;
+
+void handleUpdateUpload() {
+  HTTPUpload &upload = server.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    otaAuthOk = server.authenticate(authUser, authPass);
+    if (!otaAuthOk) {
+      LOG("OTA: tu choi upload - sai auth");
+      return;
+    }
+    LOG("OTA: bat dau nhan file '%s'", upload.filename.c_str());
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!otaAuthOk) return;
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (!otaAuthOk) return;
+    if (Update.end(true)) {
+      LOG("OTA: nhan xong %u bytes", (unsigned)upload.totalSize);
+    } else {
+      Update.printError(Serial);
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    Update.end();
+    LOG("OTA: upload bi huy giua chung");
+  }
+}
+
+void handleUpdateFinish() {
+  if (!otaAuthOk) {
+    server.requestAuthentication();
+    return;
+  }
+  bool ok = !Update.hasError();
+  server.send(200, "text/html", ok
+    ? "<script>alert('OTA thanh cong - dang khoi dong lai...');window.location.href='/';</script>"
+    : "<script>alert('OTA THAT BAI - xem log Serial, board van chay firmware cu.');window.location.href='/';</script>");
+  if (ok) {
+    delay(500);
+    ESP.restart();
+  }
 }
