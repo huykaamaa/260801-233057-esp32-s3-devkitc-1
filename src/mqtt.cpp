@@ -55,6 +55,17 @@ void sendOscState(const char *address, int value) {
 }
 
 void mqttInit() {
+  // mqttServer rong -> URI thanh "mqtt://:1883", esp_mqtt_client_init() that bai va MQTT chet
+  // han cho toi lan Save sau. F33 trong handleSave() da chan khong cho luu IP rong nen thuc te
+  // khong voi toi day duoc, nhung dat them lop nay cho dong bo voi dat_the/gia_sach.
+  // KHONG chan theo mqttEnabled: bo tick "Enable MQTT" chi chan publish (xem triggerFull()),
+  // client van ket noi toi broker nhu binh thuong.
+  if (strlen(mqttServer) == 0) {
+    mqttConnected = false;
+    LOG("MQTT: dia chi broker rong - khong khoi tao client");
+    return;
+  }
+
   static char uriBuf[96];
   snprintf(uriBuf, sizeof(uriBuf), "mqtt://%s:%u", mqttServer, mqttPort);
 

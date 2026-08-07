@@ -102,6 +102,10 @@ extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;
 extern unsigned long confirmTimeMissing;   // Thời gian xác nhận riêng cho MISSING (mặc định = confirmTime * 2)
+// Heartbeat/resync - định kỳ bắn LẠI cue gần nhất (FULL/MISSING) qua MQTT/OSC. Không đổi
+// topic/địa chỉ, chỉ "nhắc lại" giá trị hiện tại - bù cho trường hợp một lần đổi trạng thái
+// bị rớt mạng (MQTT QoS0 và OSC/UDP đều không đảm bảo gửi tới nơi). 0 = tắt.
+extern unsigned long heartbeatInterval;
 extern bool eth_connected;
 
 // --- Ethernet static-IP fallback (F19) ---------------------------------------------------

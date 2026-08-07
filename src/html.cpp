@@ -239,6 +239,13 @@ void handleRoot()
   html += "'>";
   html += "</div>";
   html += "<div class='note'>Thời gian trạng thái phải giữ ổn định trước khi publish, tách riêng cho FULL và MISSING. Cả 2 giới hạn trong khoảng 50-60000ms.</div>";
+  html += "<div class='single'>";
+  html += "<label>Heartbeat - gửi lại cue định kỳ (ms, 0 = tắt)</label>";
+  html += "<input name='heartbeat' value='";
+  html += heartbeatInterval;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>MQTT (QoS0) và OSC (UDP) đều không đảm bảo gửi tới nơi - nếu đúng lúc đổi trạng thái mà mạng chập chờn, bên nhận kẹt ở cue cũ cho tới lần đổi trạng thái kế tiếp (có thể là cả lượt khách). Heartbeat bắn lại cue hiện tại theo chu kỳ này để tự đồng bộ. Không đổi máy trạng thái, chỉ nhắc lại. Giới hạn 5000-3600000ms.</div>";
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Relay Reset (khi sensor OFFLINE)</h3>";

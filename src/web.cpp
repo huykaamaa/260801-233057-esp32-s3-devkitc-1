@@ -306,6 +306,20 @@ void handleSave() {
     confirmTimeMissing = (unsigned long)v;
   }
 
+  // Heartbeat: clamp thay vi reject, giong confirm/confirm_miss o tren. 0 = tat han; duoi 5s
+  // la vo nghia (spam broker), tren 1 gio thi khong con la luoi an toan nua.
+  if (server.hasArg("heartbeat")) {
+    long v = server.arg("heartbeat").toInt();
+    if (v <= 0) {
+      v = 0;
+    } else if (v < 5000) {
+      v = 5000;
+    } else if (v > 3600000) {
+      v = 3600000;
+    }
+    heartbeatInterval = (unsigned long)v;
+  }
+
   if (server.hasArg("auth_user") && server.arg("auth_user").length() > 0) {
     strncpy(authUser, server.arg("auth_user").c_str(), sizeof(authUser) - 1);
     authUser[sizeof(authUser) - 1] = '\0';

@@ -53,8 +53,17 @@ bool lastState = false;             // Trạng thái đầy/vắng trước đó
 bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho lastState hiện tại)
 bool publishedState = false;        // Trạng thái đã thực sự trigger/publish lần gần nhất (khác lastState!)
 unsigned long stateTimer = 0;        // Thời gian bắt đầu xác nhận trạng thái
-unsigned long confirmTime = 500;     // ms đợi xác nhận thay đổi trạng thái
-unsigned long confirmTimeMissing = 1000; // ms đợi xác nhận riêng cho MISSING
+// Gia tri o day PHAI trung voi default truyen cho prefs.getULong() trong setup() - truoc day
+// khai bao 500/1000 con loadConfig lay 1000/2000, tuc so o dong nay la code chet va doc source
+// ra sai. Gio ca 2 noi deu lay tu bien nay (xem setup()).
+unsigned long confirmTime = 1000;        // ms đợi xác nhận thay đổi trạng thái
+unsigned long confirmTimeMissing = 2000; // ms đợi xác nhận riêng cho MISSING
+
+// Heartbeat/resync - port tu dat_the/gia_sach. MQTT QoS0 va OSC/UDP deu khong dam bao toi noi;
+// neu dung luc doi trang thai ma mang chap chon thi ben nhan ket o cue cu CHO TOI LAN DOI
+// TRANG THAI VAT LY KE TIEP - voi phong nay co the la ca luot khach. Dinh ky ban lai
+// publishedState (khong doi may trang thai, chi "nhac lai" cue gan nhat). 0 = tat.
+unsigned long heartbeatInterval = 60000; // ms
 bool eth_connected = false;         // Trạng thái kết nối Ethernet
 
 // F19 static-IP fallback defaults - same /24 as this firmware's other hardcoded LAN
@@ -195,8 +204,12 @@ void setup()
     oscValueFull = prefs.getInt(NVS_KEY("osc_value_full"), 1);
     oscValueMissing = prefs.getInt(NVS_KEY("osc_value_miss"), 0);
 
-    confirmTime = prefs.getULong(NVS_KEY("confirm"), 1000);
-    confirmTimeMissing = prefs.getULong(NVS_KEY("confirm_miss"), 2000);
+    // Truyen chinh bien lam default (giong dat_the/gia_sach) thay vi go lai so - truoc day
+    // hardcode 1000/2000 o day trong khi khai bao dau file la 500/1000, hai nguon su that lech
+    // nhau va cai o day am tham thang.
+    confirmTime = prefs.getULong(NVS_KEY("confirm"), confirmTime);
+    confirmTimeMissing = prefs.getULong(NVS_KEY("confirm_miss"), confirmTimeMissing);
+    heartbeatInterval = prefs.getULong(NVS_KEY("heartbeat"), heartbeatInterval);
 
     strncpy(authUser, prefs.getString(NVS_KEY("auth_user"), "admin").c_str(), sizeof(authUser) - 1);
     authUser[sizeof(authUser) - 1] = '\0';
@@ -492,6 +505,27 @@ void checkDistance()
       actionDone = true;
     }
   }
+
+  // Heartbeat: dinh ky ban LAI publishedState (cue gan nhat), khong dong gi vao lastState/
+  // actionDone/publishedState nen khong lam nhieu may trang thai. Nam o cuoi checkDistance()
+  // co chu dich: nhanh startupWaiting o tren return som, nen truoc lan publish that dau tien
+  // heartbeat khong chay - tranh spam MISSING luc board vua boot chua doc duoc sensor nao.
+  if (heartbeatInterval > 0) {
+    static unsigned long lastHeartbeatMs = 0;
+    static bool heartbeatArmed = false;
+    if (!heartbeatArmed) {           // moc dau tien tinh tu luc thoat startupWaiting
+      lastHeartbeatMs = millis();
+      heartbeatArmed = true;
+    } else if (millis() - lastHeartbeatMs >= heartbeatInterval) {
+      lastHeartbeatMs = millis();
+      LOG("Heartbeat: gui lai cue hien tai (%s)", publishedState ? "FULL" : "MISSING");
+      if (publishedState) {
+        triggerFull();
+      } else {
+        triggerMissing();
+      }
+    }
+  }
 }
 
 int saveDistanceConfig()
@@ -546,6 +580,7 @@ int saveDistanceConfig()
   checkFixed(prefs.putInt(NVS_KEY("osc_value_miss"), oscValueMissing), "osc_value_miss");
   checkFixed(prefs.putULong(NVS_KEY("confirm"), confirmTime), "confirm");
   checkFixed(prefs.putULong(NVS_KEY("confirm_miss"), confirmTimeMissing), "confirm_miss");
+  checkFixed(prefs.putULong(NVS_KEY("heartbeat"), heartbeatInterval), "heartbeat");
   checkStr(prefs.putString(NVS_KEY("auth_user"), authUser), authUser, "auth_user");
   checkStr(prefs.putString(NVS_KEY("auth_pass"), authPass), authPass, "auth_pass");
   checkStr(prefs.putString(NVS_KEY("eth_ip"), ethStaticIp), ethStaticIp, "eth_ip");
