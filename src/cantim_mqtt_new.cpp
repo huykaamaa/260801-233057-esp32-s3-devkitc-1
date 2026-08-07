@@ -9,6 +9,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <cstring>
+#include "ping/ping_sock.h" // esp_ping - xac minh gateway co that su tra loi (xem gatewayReachable())
 
 #define DEBUG_RS485 1  // 1 = in id/distance mỗi lần nhận dòng RS485 hợp lệ ra Serial, 0 = tắt
 
@@ -118,6 +119,79 @@ void WiFiEvent(arduino_event_id_t event)
     default:
       break;
   }
+}
+
+// ======================================================================
+// KIEM TRA GATEWAY CO THAT SU TRA LOI KHONG (ICMP echo)
+// ======================================================================
+// Ly do ton tai: ETH.config() tra ve true chi co nghia "lwIP da nhan bo IP", no KHONG thu lien
+// lac voi ai ca - khong ARP, khong kiem gateway co that khong. Nen mot IP tinh dung DINH DANG
+// nhung sai MANG (vd nhap 192.168.8.4 trong khi LAN la 192.168.1.x) van lam eth_connected =
+// true, bo qua han vong cho DHCP va ca nhanh static fallback F19 ben duoi - board chot cung o
+// mot dia chi khong ai toi duoc.
+//
+// Nhanh "falling back to DHCP" cu chi bat duoc truong hop KHONG PARSE DUOC, ma cai do da bi
+// chan tu form Save (chi NVS hong moi lot). Tuc la no che dung truong hop khong the xay ra va
+// bo trong truong hop thuc te hay gap - comment cu con khang dinh nguoc lai ("a bad entry here
+// never leaves the device stuck") nen khong ai soi lai.
+static volatile bool gwPingDone = false;
+static volatile bool gwPingGotReply = false;
+
+static void onGwPingSuccess(esp_ping_handle_t hdl, void *args) { gwPingGotReply = true; }
+static void onGwPingEnd(esp_ping_handle_t hdl, void *args) { gwPingDone = true; }
+
+static bool gatewayReachable(IPAddress gw)
+{
+  // Cho link Ethernet len truoc da: W5500 mat 1-3s de negotiate. Ping khi day chua len thi
+  // chac chan khong co hoi dap va se ket luan sai la "IP tinh hong".
+  const unsigned long LINK_WAIT_MS = 5000UL;
+  unsigned long t0 = millis();
+  while (!ETH.linkUp() && (millis() - t0) < LINK_WAIT_MS) {
+    delay(50);
+  }
+  if (!ETH.linkUp()) {
+    // Khong co day mang thi DHCP cung chet, khong ket luan duoc gi - giu nguyen IP tinh.
+    LOG("ETH: chua co link sau %lu ms - bo qua buoc ping, giu IP tinh", LINK_WAIT_MS);
+    return true;
+  }
+
+  ip_addr_t target;
+  memset(&target, 0, sizeof(target));
+  target.type = IPADDR_TYPE_V4;
+  target.u_addr.ip4.addr = (uint32_t)gw; // IPAddress va ip4_addr cung network byte order
+
+  esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
+  cfg.target_addr = target;
+  cfg.count = 3;
+  cfg.interval_ms = 300;
+  cfg.timeout_ms = 700;
+
+  esp_ping_callbacks_t cbs;
+  memset(&cbs, 0, sizeof(cbs));
+  cbs.on_ping_success = onGwPingSuccess;
+  cbs.on_ping_end = onGwPingEnd;
+
+  gwPingDone = false;
+  gwPingGotReply = false;
+
+  esp_ping_handle_t hdl = NULL;
+  if (esp_ping_new_session(&cfg, &cbs, &hdl) != ESP_OK || hdl == NULL) {
+    // Khong tao duoc phien ping la loi cua ta, khong phai loi cau hinh mang cua operator -
+    // khong lay do lam co de vut bo IP tinh.
+    LOG("ETH: khong tao duoc phien ping - bo qua buoc kiem tra, giu IP tinh");
+    return true;
+  }
+
+  esp_ping_start(hdl);
+  const unsigned long PING_TOTAL_MS = 4000UL;
+  t0 = millis();
+  while (!gwPingDone && (millis() - t0) < PING_TOTAL_MS) {
+    delay(20);
+  }
+  esp_ping_stop(hdl);
+  esp_ping_delete_session(hdl);
+
+  return gwPingGotReply;
 }
 
 // Called once right after eth_connected becomes true (DHCP success or static fallback -
@@ -253,16 +327,29 @@ void setup()
 
   // "Ưu tiên IP tĩnh": apply the static IP right away and skip the DHCP wait entirely
   // (faster boot; useful when the network has no DHCP server, or a fixed IP is wanted for
-  // certain). Falls through to the normal DHCP-then-fallback path below if the static
-  // IP/gateway/netmask don't parse, so a bad entry here never leaves the device stuck.
+  // certain). Ap xong PHAI ping gateway de xac minh bo IP nay thuc su noi chuyen duoc voi
+  // mang - xem gatewayReachable() ve ly do parse duoc KHONG dong nghia voi dung.
   if (ethUseStaticFirst) {
     IPAddress ip, gw, mask;
     if (ip.fromString(ethStaticIp) && gw.fromString(ethStaticGateway) && mask.fromString(ethStaticNetmask)) {
       // Gateway as DNS1, same reasoning as the static fallback branch below (F34).
       if (ETH.config(ip, gw, mask, gw)) {
-        eth_connected = true;
-        ethFallbackUsed = true;
-        LOG("ETH: static IP applied immediately (uu tien) - %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
+        if (gatewayReachable(gw)) {
+          eth_connected = true;
+          ethFallbackUsed = true;
+          LOG("ETH: static IP applied immediately (uu tien) - %s (gateway %s, netmask %s), gateway tra loi ping", ethStaticIp, ethStaticGateway, ethStaticNetmask);
+        } else {
+          // Gateway khong tra loi -> nhieu kha nang IP tinh sai mang. Tra netif ve DHCP
+          // (local_ip = 0 lam esp_netif khoi dong lai DHCP client, xem NetworkInterface::
+          // config) roi de vong cho DHCP ben duoi chay nhu binh thuong.
+          //
+          // Neu router chan ICMP thi day la canh bao gia: gia phai tra la ~10s cho DHCP, va
+          // neu DHCP cung khong len thi nhanh static fallback F19 ben duoi VAN ap lai dung bo
+          // IP tinh nay. Truong hop xau nhat chi la boot cham hon, khong mat board.
+          LOG("ETH: gateway %s KHONG tra loi ping - IP tinh %s nhieu kha nang sai mang, chuyen sang thu DHCP", ethStaticGateway, ethStaticIp);
+          ETH.config(IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0), IPAddress(0, 0, 0, 0));
+          eth_connected = false;
+        }
       } else {
         LOG("ETH: ETH.config() (uu tien IP tinh) failed - falling back to DHCP");
       }

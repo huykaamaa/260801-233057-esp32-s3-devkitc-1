@@ -316,7 +316,7 @@ void handleRoot()
   html += htmlEscape(ethStaticNetmask);
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Mặc định: thiết bị thử DHCP trước (tối đa 10s lúc boot), chỉ dùng IP tĩnh này khi không có DHCP server. Tick \"Ưu tiên IP tĩnh\" để dùng IP tĩnh ngay từ đầu, bỏ qua hoàn toàn 10s chờ DHCP - nếu IP/Gateway/Netmask nhập sai thì tự động lùi về thử DHCP như bình thường. Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng cấu hình mới.</div>";
+  html += "<div class='note'>Mặc định: thiết bị thử DHCP trước (tối đa 10s lúc boot), chỉ dùng IP tĩnh này khi không có DHCP server. Tick \"Ưu tiên IP tĩnh\" để dùng IP tĩnh ngay từ đầu, bỏ qua hoàn toàn 10s chờ DHCP. Sau khi áp IP tĩnh, board <b>ping thử gateway</b> - không có hồi đáp thì coi như IP nhập sai mạng và tự lùi về DHCP. Nếu router chặn ICMP thì board sẽ lùi về DHCP một cách không cần thiết (chỉ chậm thêm ~10s, vẫn quay lại đúng IP tĩnh này nếu DHCP cũng không lên). Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng cấu hình mới.</div>";
   html += "</div>";
   html += "</div>"; // end tab-network
   html += "<input class='btn' type='submit' value='SAVE SETTINGS'>";
