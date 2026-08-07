@@ -2,8 +2,9 @@
 
 void handleData();
 void handleSave();
-void handleTestMQTT();
-void handleTestOSC();
+// MOT route duy nhat cho ca 2 kenh: triggerFull() ban ca MQTT lan OSC nen 2 handler rieng
+// truoc day chi khac nhau dung 1 dong LOG.
+void handleTestIot();
 void handleTestRelay();
 
 // OTA firmware update qua Web UI (Update.h, khong can thu vien ngoai) - handleUpdateUpload()

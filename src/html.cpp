@@ -316,13 +316,15 @@ void handleRoot()
   html += "</form>";
   html += "<div class='panel'>";
   html += "<h3>Test Settings</h3>";
-  html += "<form action='/test_mqtt' method='POST' style='margin-bottom:10px;'>";
-  html += "<input class='btn' type='submit' value='Test MQTT (FULL)'>";
+  // Mot nut duy nhat: truoc day co "Test MQTT" va "Test OSC" rieng nhung ca hai deu goi
+  // triggerFull(), von ban CA 2 kenh - sendOscState() nam NGOAI khoi if(mqttEnabled). Hai nut
+  // gay hieu nham la test duoc tung kenh mot: dang soi "MQTT khong toi noi" ma bam Test MQTT
+  // roi thay ben nhan OSC phan hoi thi rat de ket luan nham la MQTT on.
+  html += "<form action='/test_iot' method='POST' style='margin-bottom:10px;'>";
+  html += "<input class='btn' type='submit' value='Test MQTT + OSC (FULL)'>";
   html += "</form>";
-  html += "<form action='/test_osc' method='POST'>";
-  html += "<input class='btn' type='submit' value='Test OSC (FULL)'>";
-  html += "</form>";
-  html += "<form action='/test_relay' method='POST'>";
+  html += "<div class='note'>Bắn trạng thái FULL ra cả MQTT lẫn OSC cùng lúc - không tách riêng từng kênh được.</div>";
+  html += "<form action='/test_relay' method='POST' style='margin-top:10px;'>";
   html += "<input class='btn' type='submit' value='Test Relay'>";
   html += "</form>";
   html += "</div>";

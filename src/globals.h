@@ -76,7 +76,8 @@ extern int oscValueFull;
 extern int oscValueMissing;
 
 // --- HTTP Basic Auth for state-changing endpoints (F6) -----------------------------------
-// /save, /test_mqtt, /test_osc accept unauthenticated POSTs from anyone on the LAN (or any
+// /save, /test_iot, /test_relay, /update would otherwise accept unauthenticated POSTs from
+// anyone on the LAN (or any
 // page an operator has open in another tab). Gated with WebServer::authenticate()/
 // requestAuthentication(). Root GET "/" and polling GET "/data" stay open on purpose - they
 // only ever read/render state, and gating them would break the auto-refreshing dashboard.

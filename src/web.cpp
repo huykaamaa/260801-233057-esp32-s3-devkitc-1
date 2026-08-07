@@ -7,7 +7,7 @@
 #include <Update.h>
 #include <cstring>
 
-// F6: gate state-changing endpoints (/save, /test_mqtt, /test_osc) behind HTTP Basic Auth.
+// F6: gate state-changing endpoints (/save, /test_iot, /test_relay, /update) behind HTTP Basic Auth.
 // Returns false (and already sent a 401) if the caller is not authenticated - callers must
 // return immediately without doing any work when this returns false. Root GET "/" and
 // polling GET "/data" deliberately do NOT call this (see globals.h comment on authUser).
@@ -454,27 +454,16 @@ static void syncStateMachineAfterTestTrigger() {
   stateTimer = millis();
 }
 
-void handleTestMQTT() {
+// MOT route duy nhat cho ca 2 kenh. Truoc day co /test_mqtt va /test_osc rieng nhung than ham
+// khac nhau DUNG 1 DONG LOG - vi triggerFull() ban ca MQTT lan OSC: sendOscState() la dong
+// cuoi cua no va nam NGOAI khoi if(mqttEnabled). Hai nut rieng gay hieu nham la test duoc
+// tung kenh mot: dang soi "MQTT khong toi noi" ma bam Test MQTT roi thay ben nhan OSC phan
+// hoi thi rat de ket luan nham la MQTT on.
+void handleTestIot() {
   if (!requireAuth()) {  // F6
     return;
   }
-  LOG(">>> TEST MQTT <<<");
-  triggerFull();
-  syncStateMachineAfterTestTrigger();
-  server.send(
-    200,
-    "text/html",
-    "<script>"
-    "window.location.href='/';"
-    "</script>"
-  );
-}
-
-void handleTestOSC() {
-  if (!requireAuth()) {  // F6
-    return;
-  }
-  LOG(">>> TEST OSC <<<");
+  LOG(">>> TEST MQTT + OSC <<<");
   triggerFull();
   syncStateMachineAfterTestTrigger();
   server.send(
