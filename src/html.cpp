@@ -30,6 +30,10 @@ static String htmlEscape(const String& s)
 void handleRoot()
 {
   String html;
+  // Trang nay dai ~13KB. Khong reserve() thi day la hon chuc lan realloc+memcpy tang dan moi
+  // lan mo trang, moi lan bo lai mot lo block chet giua heap.
+  html.reserve(16384);
+
   html += "<!DOCTYPE html>";
   html += "<html>";
   html += "<head>";
@@ -71,7 +75,7 @@ void handleRoot()
   html += ".then(r=>r.text())";
   html += ".then(t=>document.getElementById('d').innerHTML=t);";
   html += "}";
-  html += "setInterval(update,100);";
+  html += "setInterval(update,250);";
   html += "window.onload=update;";
   html += "function showTab(name){";
   html += "document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));";

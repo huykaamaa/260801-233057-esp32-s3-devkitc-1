@@ -24,7 +24,18 @@ static bool requireAuth() {
 // when the result is later stored into a fixed-width type (e.g. "65537" -> uint16_t 1) - doing
 // the range check on the full `long` result before any narrowing assignment closes both holes
 // in one place instead of re-deriving it at each call site.
+// Bo sung: chuoi phai la so thap phan THUAN. Rieng toInt() van cat duoi cho chuoi lai
+// ("8080xyz" -> 8080) va tra ve 0 cho rac; hien tai 2 cho goi deu co minVal = 1 nen rac bi
+// khoang chan loai, nhung bat ky caller moi nao cho phep 0 se am tham nhan rac thanh so 0.
 static bool parseValidatedLong(const String& s, long minVal, long maxVal, long& out) {
+  if (s.length() == 0 || s.length() > 10) { // >10 chu so la chac chan tran long
+    return false;
+  }
+  for (size_t i = 0; i < s.length(); i++) {
+    if (!isdigit((unsigned char)s[i])) {
+      return false;
+    }
+  }
   long v = s.toInt();
   if (v < minVal || v > maxVal) {
     return false;
@@ -35,6 +46,10 @@ static bool parseValidatedLong(const String& s, long minVal, long maxVal, long& 
 
 void handleData() {
   String data;
+  // Trang dashboard poll route nay lien tuc khi co tab mo. Khong reserve() thi moi lan goi la
+  // mot chuoi realloc tang dan, bo lai block chet giua heap.
+  data.reserve(1024);
+
   data += "<span style='font-size:12px;color:#94a3b8'>Firmware build: " __DATE__ " " __TIME__ "</span><br>";
   data += "<b>MQTT:</b> ";
   if (!mqttEnabled) {
@@ -98,14 +113,38 @@ void handleSave() {
   // F16: validate distanceMin[i] <= distanceMax[i] per sensor before accepting either half -
   // reading both first (falling back to the current live value for whichever field wasn't
   // submitted) means a bad pair is rejected as a pair instead of partially applied.
+  // Ngoai phep so sanh min<=max, tung o con phai la SO THAT. Truoc day dung toInt() thang:
+  // "abc" -> 0 va "-50" -> -50, ca hai deu qua duoc "min <= max" va lot vao distanceMin[i].
+  // Min = 0 bien isDistanceInRange() (sensor_logic.cpp) thanh "moi khoang cach <= max deu tinh
+  // la co nguoi" - sensor do dinh cung o trang thai CO va keo dieu kien FULL sai theo, trong
+  // khi tren Web UI o MIN chi hien so 0 nhin nhu mot gia tri hop le. Day dung la lop loi ma
+  // parseSensorLine() da chan cho duong RS485 (xem comment 4.5 trong sensor_logic.cpp: "zero
+  // consumed digits ... instead of silently becoming a fabricated 0 that then masquerades as a
+  // real reading") - cung loi do, duong vao tu form web thi chua chan.
+  const long DISTANCE_MAX_MM = 8000; // xa hon tam moi cam bien trong cum, du de chan go nham
   bool sensorRangeInvalid = false;
+  bool sensorValueInvalid = false;
   for (int i = 0; i < DEVICE_NUM; i++) {
     bool haveMin = server.hasArg("min" + String(i));
     bool haveMax = server.hasArg("max" + String(i));
-    int newMin = haveMin ? server.arg("min" + String(i)).toInt() : distanceMin[i];
-    int newMax = haveMax ? server.arg("max" + String(i)).toInt() : distanceMax[i];
+    int newMin = distanceMin[i];
+    int newMax = distanceMax[i];
+    bool valuesOk = true;
+    long parsed;
+
+    if (haveMin) {
+      if (parseValidatedLong(server.arg("min" + String(i)), 0, DISTANCE_MAX_MM, parsed)) newMin = (int)parsed;
+      else valuesOk = false;
+    }
+    if (haveMax) {
+      if (parseValidatedLong(server.arg("max" + String(i)), 0, DISTANCE_MAX_MM, parsed)) newMax = (int)parsed;
+      else valuesOk = false;
+    }
+
     if (haveMin || haveMax) {
-      if (newMin <= newMax) {
+      if (!valuesOk) {
+        sensorValueInvalid = true;   // giu nguyen ca cap, khong ap dung nua o hop le
+      } else if (newMin <= newMax) {
         distanceMin[i] = newMin;
         distanceMax[i] = newMax;
       } else {
@@ -384,6 +423,10 @@ void handleSave() {
     alertMsg += " (sensor min/max rejected: min must be <= max)";
   }
 
+  if (sensorValueInvalid) {
+    alertMsg += " (sensor min/max rejected: must be a whole number 0-8000 mm)";
+  }
+
   if (ethAddressInvalid) {
     alertMsg += " (Ethernet static IP/gateway/netmask rejected: must be a valid IPv4 address)";
   }
@@ -496,7 +539,14 @@ void handleUpdateUpload() {
 }
 
 void handleUpdateFinish() {
-  if (!otaAuthOk) {
+  // Reset ngay khi doc: otaAuthOk la static nen no song qua nhieu request. Mot POST /update
+  // KHONG kem file thi handleUpdateUpload() khong chay lan nao, va co se con giu gia tri cua
+  // lan OTA truoc. Khong khai thac duoc de ghi flash (chunk START luon authenticate() lai
+  // truoc khi ghi byte nao) nhung khong co ly do gi de co do song sot qua request.
+  bool authed = otaAuthOk;
+  otaAuthOk = false;
+
+  if (!authed) {
     server.requestAuthentication();
     return;
   }

@@ -76,6 +76,10 @@ unsigned long relayPulseMs = 3000;
 // a USB cable + Serial monitor (see startDiagAp()). File-local only (static), nothing
 // outside this file needs it.
 static const unsigned long DIAG_AP_DURATION_MS = 5UL * 60UL * 1000UL; // 5 phut
+// Mat khau cho diag AP. Dung chung "12121212" voi cac phong khac trong cum de operator chi
+// phai nho mot cai. Luu y WPA2 yeu cau toi thieu 8 ky tu - ngan hon thi softAP() se fail va
+// mat luon duong vao nay.
+static const char *DIAG_AP_PASS = "12121212";
 static bool diagApActive = false;
 static unsigned long diagApStartMs = 0;
 
@@ -108,8 +112,11 @@ void WiFiEvent(arduino_event_id_t event)
 }
 
 // Called once right after eth_connected becomes true (DHCP success or static fallback -
-// both leave the real IP readable via ETH.localIP()). Open network (no password) on
-// purpose - it only needs to be readable in a WiFi scan list, not connected to. Auto-off
+// both leave the real IP readable via ETH.localIP()). Protected with DIAG_AP_PASS: this AP
+// used to be open on the reasoning that it only needs to be READABLE in a WiFi scan list,
+// never connected to - but the WebServer listens on every netif, so anyone joining it landed
+// straight on the (unauthenticated) "/" config page at 192.168.4.1. If nobody is meant to
+// connect, a password costs nothing and closes that path. Auto-off
 // after DIAG_AP_DURATION_MS is handled in loop() so this doesn't keep the radio on (RF
 // noise + power) once the diagnostic window has passed. `isFallback` (caller knows which
 // branch of setup()'s ETH block succeeded) picks the SSID prefix so an operator can tell
@@ -118,7 +125,7 @@ void WiFiEvent(arduino_event_id_t event)
 static void startDiagAp(bool isFallback)
 {
   String ssid = (isFallback ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
-  if (WiFi.softAP(ssid.c_str())) {
+  if (WiFi.softAP(ssid.c_str(), DIAG_AP_PASS)) {
     diagApActive = true;
     diagApStartMs = millis();
     LOG("Diag AP: broadcasting '%s' for %lu min", ssid.c_str(), DIAG_AP_DURATION_MS / 60000UL);
