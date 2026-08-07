@@ -6,3 +6,6 @@
 logs/
 __pycache__/
 compile_commands.json
+
+# local-only, khong nen commit: allowlist quyen cua Claude Code theo tung may
+.claude/settings.local.json
