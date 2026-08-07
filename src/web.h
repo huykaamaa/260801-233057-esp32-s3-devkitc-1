@@ -11,3 +11,6 @@ void handleTestRelay();
 // nhan tung chunk file trong luc upload, handleUpdateFinish() chay 1 lan sau khi nhan xong.
 void handleUpdateUpload();
 void handleUpdateFinish();
+
+// Reset mem board qua Web UI (ESP.restart()). Gated giong cac route doi trang thai khac.
+void handleReboot();

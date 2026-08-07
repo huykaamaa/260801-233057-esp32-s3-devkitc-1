@@ -224,7 +224,7 @@ void setup()
   // log this plainly and unconditionally at every boot while defaults are still in effect,
   // so an operator watching Serial sees it without having to go looking.
   if (strcmp(authUser, "admin") == 0 && strcmp(authPass, "admin") == 0) {
-    LOG("AUTH: using default admin credentials (admin/admin) for /save, /test_iot, /test_relay, /update - "
+    LOG("AUTH: using default admin credentials (admin/admin) for /save, /test_iot, /test_relay, /update, /reboot - "
         "change via Web UI 'Admin Auth' panel");
   }
 
@@ -301,6 +301,7 @@ void setup()
   server.on("/test_iot", HTTP_POST, handleTestIot);
   server.on("/test_relay", HTTP_POST, handleTestRelay);
   server.on("/update", HTTP_POST, handleUpdateFinish, handleUpdateUpload);
+  server.on("/reboot", HTTP_POST, handleReboot);
   server.begin();
   oscUdp.begin(9000);
 

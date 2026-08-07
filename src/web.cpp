@@ -475,6 +475,26 @@ void handleTestIot() {
   );
 }
 
+// Reset mem board. Gui response TRUOC roi moi restart (giong handleUpdateFinish) - neu goi
+// ESP.restart() ngay thi trinh duyet chi thay ket noi bi cat, khong biet lenh da nhan chua.
+// KHONG dung toi cac node ve tinh: chung co nguon rieng, muon reset node thi dung Test Relay.
+void handleReboot() {
+  if (!requireAuth()) {  // F6
+    return;
+  }
+  LOG(">>> REBOOT <<<");
+  server.send(
+    200,
+    "text/html",
+    "<script>"
+    "alert('Board dang khoi dong lai. Doi khoang 15-20 giay roi tai lai trang.');"
+    "setTimeout(function(){window.location.href='/';},10000);"
+    "</script>"
+  );
+  delay(500); // cho response gui xong truoc khi reboot
+  ESP.restart();
+}
+
 void handleTestRelay() {
   if (!requireAuth()) {  // F6
     return;
