@@ -11,7 +11,11 @@
 #include <cstring>
 #include "ping/ping_sock.h" // esp_ping - xac minh gateway co that su tra loi (xem gatewayReachable())
 
-#define DEBUG_RS485 1  // 1 = in id/distance mỗi lần nhận dòng RS485 hợp lệ ra Serial, 0 = tắt
+// 1 = in id/distance mỗi lần nhận dòng RS485 hợp lệ ra Serial, 0 = tắt.
+// Để 0 cho bản chạy thật: 3 node gửi liên tục nên đây là dòng in KHÔNG có giới hạn tốc độ,
+// vừa tốn CPU format chuỗi, vừa có thể chặn loop() tới ~100ms nếu USB đang cắm vào chỗ không
+// ai đọc (HWCDC::write chờ hết tx_timeout_ms rồi mới bỏ cuộc). Bật 1 khi cần soi RS485.
+#define DEBUG_RS485 0
 
 SPIClass spi(FSPI);
 WebServer server(80);                // Web server chạy trên cổng 80
