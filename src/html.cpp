@@ -130,6 +130,15 @@ void handleRoot()
     html += "</div>";
   }
   html += "<div class='note'>Enable only the sensors that should be required for the FULL condition.</div>";
+  html += "<div class='single'>";
+  html += "<label>Số sensor rớt mới tính là MISSING (1-";
+  html += DEVICE_NUM;
+  html += ")</label>";
+  html += "<input name='miss_thresh' value='";
+  html += missingThreshold;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>1 = rớt 1 cái là MISSING ngay (mặc định, như trước giờ). 2 = rớt 1 vẫn còn FULL, rớt 2 mới MISSING. 3 = phải rớt cả 3 mới MISSING. Chỉ đếm các sensor đang tick Enable VÀ đang online - sensor OFFLINE bị loại khỏi phép đếm chứ không tính là rớt. Nếu số sensor online còn ít hơn ngưỡng này thì ngưỡng tự hạ xuống bằng số đó, tránh trường hợp không bao giờ MISSING được.</div>";
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>MQTT Settings</h3>";

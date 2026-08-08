@@ -56,6 +56,7 @@ bool sensorEnabled[DEVICE_NUM] = {true, true, true};
 bool sensorOfflineAlerted[DEVICE_NUM] = {false, false, false}; // Da gui MQTT canh bao OFFLINE chua (reset khi online lai)
 int distanceMin[DEVICE_NUM] = {200, 200, 200}; // Ngưỡng min của mỗi sensor
 int distanceMax[DEVICE_NUM] = {800, 800, 800}; // Ngưỡng max của mỗi sensor
+int missingThreshold = 1;                      // Xem globals.h. 1 = hành vi cũ
 bool manualOverride = false;        // Xem globals.h - true = đã bấm nút tay, logic cảm biến dừng
 bool lastState = false;             // Trạng thái đầy/vắng trước đó (raw, dùng để debounce)
 bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho lastState hiện tại)
@@ -250,6 +251,13 @@ void setup()
       distanceMin[i] = prefs.getInt(("min" + String(i)).c_str(), distanceMin[i]);
       distanceMax[i] = prefs.getInt(("max" + String(i)).c_str(), distanceMax[i]);
       sensorEnabled[i] = prefs.getBool(("sensor" + String(i)).c_str(), sensorEnabled[i]);
+    }
+    missingThreshold = prefs.getInt(NVS_KEY("miss_thresh"), missingThreshold);
+    if (missingThreshold < 1 || missingThreshold > DEVICE_NUM) {
+      // NVS hong hoac du lieu tu ban firmware khac - ve mac dinh thay vi de gia tri vo nghia
+      // lam hong logic FULL/MISSING am tham.
+      LOG("NVS: miss_thresh = %d ngoai khoang 1..%d - dat lai ve 1", missingThreshold, DEVICE_NUM);
+      missingThreshold = 1;
     }
     strncpy(mqttServer, prefs.getString(NVS_KEY("mqtt_ip"), "192.168.99.225").c_str(), sizeof(mqttServer) - 1);
     mqttServer[sizeof(mqttServer) - 1] = '\0';
@@ -621,7 +629,18 @@ void checkDistance()
     }
   }
 
-  bool currentState = (requiredCount > 0 && countOK == requiredCount);
+  // FULL khi so sensor RỚT còn DƯỚI ngưỡng. missingThreshold = 1 cho ra đúng hành vi cũ
+  // (countOK == requiredCount).
+  //
+  // Kẹp ngưỡng theo requiredCount: sensor offline bị loại khỏi requiredCount, nên nếu để
+  // nguyên ngưỡng 3 mà chỉ còn 2 sensor online thì số rớt tối đa là 2, không bao giờ chạm 3
+  // -> trạng thái kẹt ở FULL vĩnh viễn. Kẹp lại giữ đúng ý "phải mất HẾT mới là MISSING"
+  // thay vì biến nó thành "không bao giờ MISSING".
+  int effectiveThreshold = missingThreshold;
+  if (effectiveThreshold > requiredCount) {
+    effectiveThreshold = requiredCount;
+  }
+  bool currentState = (requiredCount > 0 && (requiredCount - countOK) < effectiveThreshold);
 
   // MISSING dùng confirmTimeMissing riêng (mặc định = confirmTime * 2) - cấu hình được qua
   // Web UI, không cố định x2 cứng để tránh publish MISSING nhầm khi người tạm rời sensor.
@@ -755,6 +774,7 @@ int saveDistanceConfig()
     checkFixed(prefs.putInt(maxKey.c_str(), distanceMax[i]), maxKey.c_str());
     checkFixed(prefs.putBool(sensorKey.c_str(), sensorEnabled[i]), sensorKey.c_str());
   }
+  checkFixed(prefs.putInt(NVS_KEY("miss_thresh"), missingThreshold), "miss_thresh");
 
   checkFixed(prefs.putBool(NVS_KEY("osc_en"), oscEnabled), "osc_en");
   checkStr(prefs.putString(NVS_KEY("osc_ip"), oscIp), oscIp, "osc_ip");

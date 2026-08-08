@@ -121,6 +121,13 @@ extern bool manualOverride;
 void syncStateMachineAfterManualTrigger(bool state);
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
+
+// Bao nhiêu sensor phải RỚT (ra ngoài ngưỡng min/max) thì mới chuyển sang MISSING.
+// 1 = hành vi cũ (rớt 1 cái là MISSING ngay). 2 = rớt 1 cái vẫn còn FULL, rớt 2 mới MISSING.
+// Chỉ tính trên các sensor đang enable VÀ đang online - sensor offline bị loại khỏi
+// requiredCount nên không bị tính là "rớt" (xem checkDistance()).
+// Cấu hình qua Web UI, hợp lệ 1..DEVICE_NUM.
+extern int missingThreshold;
 extern unsigned long confirmTime;
 extern unsigned long confirmTimeMissing;   // Thời gian xác nhận riêng cho MISSING (mặc định = confirmTime * 2)
 // Heartbeat/resync - định kỳ bắn LẠI cue gần nhất (FULL/MISSING) qua MQTT/OSC. Không đổi

@@ -3,6 +3,7 @@
 #include "web.h"
 #include "html.h"
 #include "relay.h"
+#include "sensor_logic.h" // isDistanceInRange() - dung o handleData de dem sensor trong nguong
 #include <Arduino.h>
 #include <Update.h>
 #include <cstring>
@@ -96,6 +97,18 @@ void handleData() {
   } else {
     data += "<span style='color:red;font-size:20px'><b>❌ MISSING</b></span>";
   }
+  // Voi nguong MISSING > 1 thi nhin badge FULL/MISSING khong the biet dang con cach nguong bao
+  // xa - vd nguong 3, dang rot 2 cai thi van hien FULL y het luc khong rot cai nao. Dem lai o
+  // day (doc lap voi checkDistance, khong dung bien chung) de thay ro.
+  int okCount = 0, onlineCount = 0;
+  for (int i = 0; i < DEVICE_NUM; i++) {
+    if (!sensorEnabled[i] || (millis() - lastRS485[i] > RS485_TIMEOUT)) continue;
+    onlineCount++;
+    if (isDistanceInRange(rsDistance[i], distanceMin[i], distanceMax[i])) okCount++;
+  }
+  data += "<br>Trong ngưỡng: <b>" + String(okCount) + "/" + String(onlineCount) + "</b> sensor online";
+  data += " &nbsp;|&nbsp; rớt <b>" + String(onlineCount - okCount) + "</b>";
+  data += ", MISSING khi rớt <b>" + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
   data += "<br><br>";
 
   for (int i = 0; i < DEVICE_NUM; i++) {
@@ -167,6 +180,19 @@ void handleSave() {
       // checkDistance() trong cantim_mqtt_new.cpp - flag chi duoc dung/reset khi sensor
       // dang enable).
       sensorOfflineAlerted[i] = false;
+    }
+  }
+
+  // Nguong so sensor rot moi tinh la MISSING. Reject + bao len UI thay vi clamp: day la con so
+  // quyet dinh truc tiep logic FULL/MISSING cua phong, nhap sai ma bi lam tron am tham thi
+  // operator tuong da doi duoc trong khi thuc te khong.
+  bool missThreshInvalid = false;
+  if (server.hasArg("miss_thresh")) {
+    long v;
+    if (parseValidatedLong(server.arg("miss_thresh"), 1, DEVICE_NUM, v)) {
+      missingThreshold = (int)v;
+    } else {
+      missThreshInvalid = true;
     }
   }
 
@@ -448,6 +474,10 @@ void handleSave() {
 
   if (sensorValueInvalid) {
     alertMsg += " (sensor min/max rejected: must be a whole number 0-8000 mm)";
+  }
+
+  if (missThreshInvalid) {
+    alertMsg += " (nguong MISSING rejected: must be a whole number 1-" + String(DEVICE_NUM) + ")";
   }
 
   if (ethAddressInvalid) {
