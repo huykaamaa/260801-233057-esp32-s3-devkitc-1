@@ -56,6 +56,17 @@ extern WiFiUDP oscUdp;
 #define RS485_RX RX
 #define RS485_TX -1
 
+// --- 2 nut nhan tay (INPUT_PULLUP, nhan = keo xuong mass) --------------------------------
+// Dung khi cam bien hong/offline ma van phai day show chay tiep. Bam la CHOT trang thai do
+// lai va TAM DUNG han logic cam bien - chi reboot board moi ve lai che do tu dong. Xem
+// checkButtons() va manualOverride trong cantim_mqtt_new.cpp.
+// GPIO 1/2 dang trong: ETH dung 10/11/12/13, relay 4/5/6/7, RS485_RX la RX (GPIO 44). Ca hai
+// deu khong phai chan strapping cua ESP32-S3 (0, 3, 45, 46).
+#define BTN_FULL_PIN 1        // nhan -> chot FULL
+#define BTN_MISSING_PIN 2     // nhan -> chot MISSING
+#define BTN_ACTIVE LOW
+#define BTN_DEBOUNCE_MS 50UL
+
 extern esp_mqtt_client_handle_t mqtt;
 extern bool mqttConnected;
 extern bool mqttEnabled;
@@ -98,6 +109,16 @@ extern bool lastState;
 extern bool actionDone;
 extern bool publishedState;          // Trạng thái đã thực sự publish (MQTT/OSC) lần gần nhất
 extern unsigned long stateTimer;
+
+// true = đang ở CHẾ ĐỘ TAY (đã bấm 1 trong 2 nút). checkDistance() thoát ngay, logic cảm biến
+// dừng hẳn, cue giữ nguyên ở trạng thái vừa bấm. Chỉ reboot mới về tự động - cố ý không lưu
+// vào NVS để mất điện/reboot là trở lại bình thường.
+extern bool manualOverride;
+
+// Đồng bộ lại bookkeeping của máy trạng thái sau khi một cue được bắn từ bên ngoài (nút Test
+// trên Web UI, hoặc 2 nút nhấn tay). Không có bước này thì checkDistance() vẫn tin cue cũ là
+// cue đã publish và sẽ không bắn lại khi trạng thái thật đổi về đúng giá trị đó.
+void syncStateMachineAfterManualTrigger(bool state);
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
 extern unsigned long confirmTime;

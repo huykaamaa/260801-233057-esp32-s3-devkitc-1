@@ -79,6 +79,15 @@ void handleData() {
     }
   }
 
+  // Che do tay phai hien that noi bat: dang o che do nay thi cam bien khong con dieu khien gi
+  // ca, ma nhin vao badge FULL/MISSING thi khong the doan ra - operator se ngoi thac mac tai
+  // sao dat vat len cam bien ma khong doi trang thai.
+  if (manualOverride) {
+    data += "<div style='background:#fff3cd;border-left:5px solid #ff9800;padding:8px 10px;"
+            "border-radius:8px;margin-bottom:8px'><b style='color:#e65100'>&#9888; CHẾ ĐỘ TAY</b>"
+            " - cue đang bị chốt bằng nút nhấn, cảm biến KHÔNG điều khiển gì. Reboot board để về tự động.</div>";
+  }
+
   data += "<b>STATUS:</b> ";
   if (!anySensorEnabled) {
     data += "<span style='color:orange;font-size:20px'><b>[!] NO SENSORS ENABLED</b></span>";
@@ -455,18 +464,10 @@ void handleSave() {
   );
 }
 
-// Test buttons fire a real FULL cue on purpose (for testing MQTT/OSC wiring), but must also
-// update the state machine's bookkeeping (lastState/actionDone/publishedState) to reflect that
-// FULL was just (test-)published - otherwise checkDistance() keeps believing the previous
-// steady-state cue is still the "already published" one and will never re-fire a real
-// triggerMissing()/triggerFull() until an unrelated raw transition happens, permanently
-// desyncing the receiver from the actual sensor state (new finding 4.6).
-static void syncStateMachineAfterTestTrigger() {
-  lastState = true;
-  publishedState = true;
-  actionDone = true;
-  stateTimer = millis();
-}
+// Ham dong bo bookkeeping sau khi ban cue tu ben ngoai da chuyen sang cantim_mqtt_new.cpp
+// (syncStateMachineAfterManualTrigger) de dung chung voi 2 nut nhan tay - xem globals.h.
+// Nut Test KHONG bat manualOverride: no chi la phep thu duong MQTT/OSC, logic cam bien phai
+// tiep tuc chay binh thuong ngay sau do.
 
 // MOT route duy nhat cho ca 2 kenh. Truoc day co /test_mqtt va /test_osc rieng nhung than ham
 // khac nhau DUNG 1 DONG LOG - vi triggerFull() ban ca MQTT lan OSC: sendOscState() la dong
@@ -479,7 +480,7 @@ void handleTestIot() {
   }
   LOG(">>> TEST MQTT + OSC <<<");
   triggerFull();
-  syncStateMachineAfterTestTrigger();
+  syncStateMachineAfterManualTrigger(true);
   server.send(
     200,
     "text/html",

@@ -25,6 +25,8 @@ WiFiUDP oscUdp;
 
 void readRS485();
 void checkDistance();
+static void checkButtons();
+void updateHeartbeat();
 
 esp_mqtt_client_handle_t mqtt = nullptr; // MQTT client handle
 bool mqttConnected = false;          // Trạng thái kết nối MQTT
@@ -54,6 +56,7 @@ bool sensorEnabled[DEVICE_NUM] = {true, true, true};
 bool sensorOfflineAlerted[DEVICE_NUM] = {false, false, false}; // Da gui MQTT canh bao OFFLINE chua (reset khi online lai)
 int distanceMin[DEVICE_NUM] = {200, 200, 200}; // Ngưỡng min của mỗi sensor
 int distanceMax[DEVICE_NUM] = {800, 800, 800}; // Ngưỡng max của mỗi sensor
+bool manualOverride = false;        // Xem globals.h - true = đã bấm nút tay, logic cảm biến dừng
 bool lastState = false;             // Trạng thái đầy/vắng trước đó (raw, dùng để debounce)
 bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho lastState hiện tại)
 bool publishedState = false;        // Trạng thái đã thực sự trigger/publish lần gần nhất (khác lastState!)
@@ -321,6 +324,10 @@ void setup()
 
   relayInit();
 
+  // 2 nut nhan tay - INPUT_PULLUP, nhan = keo xuong mass (xem checkButtons()).
+  pinMode(BTN_FULL_PIN, INPUT_PULLUP);
+  pinMode(BTN_MISSING_PIN, INPUT_PULLUP);
+
   WiFi.onEvent(WiFiEvent);
   spi.begin(ETH_SCK, ETH_MISO, ETH_MOSI, ETH_CS);
   if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS, ETH_INT, ETH_RST, spi)) {
@@ -425,8 +432,10 @@ void loop()
     LOG("Diag AP: turned off after %lu min", DIAG_AP_DURATION_MS / 60000UL);
   }
 
+  checkButtons();
   readRS485();
   checkDistance();
+  updateHeartbeat();
   relayTick();
 }
 
@@ -502,8 +511,80 @@ void readRS485()
   }
 }
 
+// Test buttons fire a real cue on purpose, but must also update the state machine's
+// bookkeeping (lastState/actionDone/publishedState) to reflect that - otherwise checkDistance()
+// keeps believing the previous steady-state cue is still the "already published" one and will
+// never re-fire a real triggerMissing()/triggerFull() until an unrelated raw transition happens,
+// permanently desyncing the receiver from the actual sensor state (new finding 4.6).
+// true sau lan publish cue THAT dau tien (may trang thai chot xong luc boot, doi trang thai,
+// hoac bam nut tay / nut Test). Heartbeat dung co nay de khong ban gi truoc do - xem
+// updateHeartbeat().
+static bool cuePublished = false;
+
+void syncStateMachineAfterManualTrigger(bool state)
+{
+  lastState = state;
+  publishedState = state;
+  actionDone = true;
+  stateTimer = millis();
+  cuePublished = true;
+}
+
+// 2 nut nhan tay. Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien
+// tuc. Moi nut co bo debounce rieng.
+//
+// Bam la vao CHE DO TAY vinh vien cho toi khi reboot. Ly do phai chot chu khong chi ban 1
+// phat: dung tinh huong can nut nay nhat la khi cam bien hong/offline, luc do requiredCount =
+// 0 nen checkDistance() tinh ra MISSING - neu khong chot thi cue FULL vua bam tay se bi may
+// trang thai de nguoc lai sau confirmTimeMissing (~2s), tuc nut vo dung dung luc can nhat.
+static void checkButtons()
+{
+  struct Btn {
+    uint8_t pin;
+    bool state;      // muc da debounce
+    bool reading;    // muc doc duoc gan nhat
+    unsigned long timer;
+  };
+  static Btn btns[2] = {
+    { BTN_FULL_PIN,    !BTN_ACTIVE, !BTN_ACTIVE, 0 },
+    { BTN_MISSING_PIN, !BTN_ACTIVE, !BTN_ACTIVE, 0 },
+  };
+
+  for (int i = 0; i < 2; i++) {
+    bool raw = (digitalRead(btns[i].pin) == BTN_ACTIVE);
+
+    if (raw != btns[i].reading) {
+      btns[i].reading = raw;
+      btns[i].timer = millis();
+    }
+
+    if (millis() - btns[i].timer >= BTN_DEBOUNCE_MS && btns[i].state != btns[i].reading) {
+      btns[i].state = btns[i].reading;
+
+      if (btns[i].state) { // chi xu ly luc VUA NHAN, bo qua luc nha
+        bool wantFull = (i == 0);
+        manualOverride = true;
+        LOG(">>> NUT TAY: %s - vao CHE DO TAY, logic cam bien dung han, reboot de ve tu dong <<<",
+            wantFull ? "FULL" : "MISSING");
+        if (wantFull) {
+          triggerFull();
+        } else {
+          triggerMissing();
+        }
+        syncStateMachineAfterManualTrigger(wantFull);
+      }
+    }
+  }
+}
+
 void checkDistance()
 {
+  // Che do tay: dung han logic cam bien, giu nguyen cue vua bam. Heartbeat van chay (nam o
+  // updateHeartbeat() trong loop()) nen cue tay van duoc nhac lai dinh ky nhu binh thuong.
+  if (manualOverride) {
+    return;
+  }
+
   static bool startupWaiting = true;
   static bool startupStateInitialized = false;
   static bool startupState = false;
@@ -560,6 +641,7 @@ void checkDistance()
       stateTimer = millis();
       actionDone = true;
       publishedState = currentState;  // ghi nhận đây là trạng thái vừa thực sự publish
+      cuePublished = true;
 
       if (currentState) {
         LOG("FULL");
@@ -592,29 +674,41 @@ void checkDistance()
           triggerMissing();
         }
         publishedState = currentState;
+        cuePublished = true;
       }
       actionDone = true;
     }
   }
 
-  // Heartbeat: dinh ky ban LAI publishedState (cue gan nhat), khong dong gi vao lastState/
-  // actionDone/publishedState nen khong lam nhieu may trang thai. Nam o cuoi checkDistance()
-  // co chu dich: nhanh startupWaiting o tren return som, nen truoc lan publish that dau tien
-  // heartbeat khong chay - tranh spam MISSING luc board vua boot chua doc duoc sensor nao.
-  if (heartbeatInterval > 0) {
-    static unsigned long lastHeartbeatMs = 0;
-    static bool heartbeatArmed = false;
-    if (!heartbeatArmed) {           // moc dau tien tinh tu luc thoat startupWaiting
-      lastHeartbeatMs = millis();
-      heartbeatArmed = true;
-    } else if (millis() - lastHeartbeatMs >= heartbeatInterval) {
-      lastHeartbeatMs = millis();
-      LOG("Heartbeat: gui lai cue hien tai (%s)", publishedState ? "FULL" : "MISSING");
-      if (publishedState) {
-        triggerFull();
-      } else {
-        triggerMissing();
-      }
+}
+
+// Heartbeat: dinh ky ban LAI publishedState (cue gan nhat), khong dong gi vao lastState/
+// actionDone/publishedState nen khong lam nhieu may trang thai.
+//
+// Truoc day nam o cuoi checkDistance() de an theo nhanh startupWaiting (return som). Gio
+// checkDistance() con thoat som khi manualOverride nua, ma o che do tay VAN phai nhac lai cue
+// - nen tach ra day, goi thang tu loop(), va dung co cuePublished lam dieu kien thay the:
+// truoc lan publish that dau tien thi khong ban gi, tranh spam MISSING luc board vua boot
+// chua doc duoc sensor nao.
+void updateHeartbeat()
+{
+  if (heartbeatInterval == 0 || !cuePublished) {
+    return;
+  }
+
+  static unsigned long lastHeartbeatMs = 0;
+  static bool heartbeatArmed = false;
+  if (!heartbeatArmed) {           // moc dau tien tinh tu cue that dau tien
+    lastHeartbeatMs = millis();
+    heartbeatArmed = true;
+  } else if (millis() - lastHeartbeatMs >= heartbeatInterval) {
+    lastHeartbeatMs = millis();
+    LOG("Heartbeat: gui lai cue hien tai (%s)%s", publishedState ? "FULL" : "MISSING",
+        manualOverride ? " [CHE DO TAY]" : "");
+    if (publishedState) {
+      triggerFull();
+    } else {
+      triggerMissing();
     }
   }
 }
