@@ -87,7 +87,7 @@ void handleData() {
     data += "<div style='background:#fff3cd;border-left:5px solid #ff9800;padding:8px 10px;"
             "border-radius:8px;margin-bottom:8px'><b style='color:#e65100'>&#9888; CHẾ ĐỘ TAY</b>"
             " - cue đang bị chốt ở FULL bằng nút nhấn, cảm biến KHÔNG điều khiển gì."
-            " Bấm <b>nút MISSING</b> để bắn cue MISSING và trả quyền lại cho cảm biến.</div>";
+            " Bấm nút <b>lần nữa</b> để bắn cue MISSING và trả quyền lại cho cảm biến.</div>";
   }
 
   data += "<b>STATUS:</b> ";

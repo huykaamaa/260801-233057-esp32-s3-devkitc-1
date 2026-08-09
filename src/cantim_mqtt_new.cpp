@@ -332,9 +332,8 @@ void setup()
 
   relayInit();
 
-  // 2 nut nhan tay - INPUT_PULLUP, nhan = keo xuong mass (xem checkButtons()).
-  pinMode(BTN_FULL_PIN, INPUT_PULLUP);
-  pinMode(BTN_MISSING_PIN, INPUT_PULLUP);
+  // Nut nhan tay - INPUT_PULLUP, nhan = keo xuong mass (xem checkButtons()).
+  pinMode(BTN_MANUAL_PIN, INPUT_PULLUP);
 
   WiFi.onEvent(WiFiEvent);
   spi.begin(ETH_SCK, ETH_MISO, ETH_MOSI, ETH_CS);
@@ -538,68 +537,63 @@ void syncStateMachineAfterManualTrigger(bool state)
   cuePublished = true;
 }
 
-// 2 nut nhan tay - mot chu ky show day du, khop voi nhip MISSING -> FULL -> MISSING:
+// MOT nut nhan tay, bam luan phien qua lai - van dung chu ky cu, chi gop 2 nut thanh 1:
 //
-//   Nut FULL    : ban cue FULL va VAO che do tay (cam bien ngung dieu khien, cue giu nguyen)
-//   Nut MISSING : ban cue MISSING va TRA quyen lai cho cam bien (ve che do tu dong)
+//   Dang TU DONG -> bam: ban cue FULL va VAO che do tay (cam bien ngung dieu khien)
+//   Dang CHE DO TAY -> bam: ban cue MISSING va TRA quyen lai cho cam bien
 //
-// Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien tuc. Moi nut co bo
-// debounce rieng.
+// Luan phien bam theo manualOverride chu khong theo publishedState. Neu bam theo
+// publishedState thi luc cam bien tu no dang o FULL, bam nut se ra MISSING - va khong ro la
+// nen vao hay ra che do tay. Bam theo manualOverride thi nghia cua nut luon xac dinh: "di
+// tiep mot buoc trong chu ky tay", va dashboard bao ro dang o nua nao.
 //
-// Vi sao nut FULL phai CHOT chu khong chi ban 1 phat: dung tinh huong can nut nay nhat la khi
+// Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien tuc.
+//
+// Vi sao buoc FULL phai CHOT chu khong chi ban 1 phat: dung tinh huong can nut nay nhat la khi
 // cam bien hong/offline, luc do requiredCount = 0 nen checkDistance() tinh ra MISSING - neu
 // khong chot thi cue FULL vua bam tay se bi may trang thai de nguoc lai sau confirmTimeMissing
 // (~2s), tuc nut vo dung dung luc can nhat.
 //
-// Vi sao bam MISSING tra ve tu dong la an toan: sau khi tra quyen, neu cam bien VAN hong thi
+// Vi sao buoc MISSING tra ve tu dong la an toan: sau khi tra quyen, neu cam bien VAN hong thi
 // no cho ra MISSING - trung dung cue vua ban nen khong co gi bi bat lai. Neu cam bien song lai
 // thi no chay tiep binh thuong. Nghia la ke ca cam bien hong vinh vien, van chay duoc vo han
-// chu ky: bam FULL cho khach vao, bam MISSING khi xong, luot sau lap lai.
+// chu ky: bam cho khach vao, bam lan nua khi xong, luot sau lap lai.
 //
-// LUU Y: 2 nut nay KHONG dung toi sensorEnabled[] (o tick Enable tung sensor tren Web UI, co
-// luu NVS). Chung chi lat manualOverride - hieu qua giong "tam ngung cam bien" nhung khong sua
-// cau hinh da luu cua operator.
+// LUU Y: nut nay KHONG dung toi sensorEnabled[] (o tick Enable tung sensor tren Web UI, co luu
+// NVS). No chi lat manualOverride - hieu qua giong "tam ngung cam bien" nhung khong sua cau
+// hinh da luu cua operator.
 static void checkButtons()
 {
-  struct Btn {
-    uint8_t pin;
-    bool state;      // muc da debounce
-    bool reading;    // muc doc duoc gan nhat
-    unsigned long timer;
-  };
-  static Btn btns[2] = {
-    { BTN_FULL_PIN,    !BTN_ACTIVE, !BTN_ACTIVE, 0 },
-    { BTN_MISSING_PIN, !BTN_ACTIVE, !BTN_ACTIVE, 0 },
-  };
+  static bool btnState = !BTN_ACTIVE;   // muc da debounce
+  static bool btnReading = !BTN_ACTIVE; // muc doc duoc gan nhat
+  static unsigned long btnTimer = 0;
 
-  for (int i = 0; i < 2; i++) {
-    bool raw = (digitalRead(btns[i].pin) == BTN_ACTIVE);
+  bool raw = (digitalRead(BTN_MANUAL_PIN) == BTN_ACTIVE);
 
-    if (raw != btns[i].reading) {
-      btns[i].reading = raw;
-      btns[i].timer = millis();
-    }
+  if (raw != btnReading) {
+    btnReading = raw;
+    btnTimer = millis();
+  }
 
-    if (millis() - btns[i].timer >= BTN_DEBOUNCE_MS && btns[i].state != btns[i].reading) {
-      btns[i].state = btns[i].reading;
+  if (millis() - btnTimer >= BTN_DEBOUNCE_MS && btnState != btnReading) {
+    btnState = btnReading;
 
-      if (btns[i].state) { // chi xu ly luc VUA NHAN, bo qua luc nha
-        bool wantFull = (i == 0);
-        manualOverride = wantFull; // FULL = vao che do tay, MISSING = tra ve tu dong
+    if (btnState) { // chi xu ly luc VUA NHAN, bo qua luc nha
+      bool wantFull = !manualOverride;  // dang tu dong -> vao tay (FULL); dang tay -> ra (MISSING)
+      manualOverride = wantFull;
 
-        if (wantFull) {
-          LOG(">>> NUT TAY: FULL - vao CHE DO TAY, cam bien ngung dieu khien. Bam nut MISSING de tra ve tu dong <<<");
-          triggerFull();
-        } else {
-          LOG(">>> NUT TAY: MISSING - ban cue MISSING va TRA quyen lai cho cam bien (che do tu dong) <<<");
-          triggerMissing();
-        }
-
-        // Dong bo bookkeeping SAU khi da dat manualOverride: khi tra ve tu dong, buoc nay dat
-        // lastState/publishedState = false nen vong checkDistance() ke tiep khong thay lech
-        // gia va ban lai MISSING lan nua.
-        syncStateMachineAfterManualTrigger(wantFull);
+      if (wantFull) {
+        LOG(">>> NUT TAY: FULL - vao CHE DO TAY, cam bien ngung dieu khien. Bam lan nua de ban MISSING va tra ve tu dong <<<");
+        triggerFull();
+      } else {
+        LOG(">>> NUT TAY: MISSING - ban cue MISSING va TRA quyen lai cho cam bien (che do tu dong) <<<");
+        triggerMissing();
       }
+
+      // Dong bo bookkeeping SAU khi da dat manualOverride: khi tra ve tu dong, buoc nay dat
+      // lastState/publishedState = false nen vong checkDistance() ke tiep khong thay lech gia
+      // va ban lai MISSING lan nua.
+      syncStateMachineAfterManualTrigger(wantFull);
     }
   }
 }
