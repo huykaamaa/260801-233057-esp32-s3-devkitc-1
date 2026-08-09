@@ -538,13 +538,27 @@ void syncStateMachineAfterManualTrigger(bool state)
   cuePublished = true;
 }
 
-// 2 nut nhan tay. Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien
-// tuc. Moi nut co bo debounce rieng.
+// 2 nut nhan tay - mot chu ky show day du, khop voi nhip MISSING -> FULL -> MISSING:
 //
-// Bam la vao CHE DO TAY vinh vien cho toi khi reboot. Ly do phai chot chu khong chi ban 1
-// phat: dung tinh huong can nut nay nhat la khi cam bien hong/offline, luc do requiredCount =
-// 0 nen checkDistance() tinh ra MISSING - neu khong chot thi cue FULL vua bam tay se bi may
-// trang thai de nguoc lai sau confirmTimeMissing (~2s), tuc nut vo dung dung luc can nhat.
+//   Nut FULL    : ban cue FULL va VAO che do tay (cam bien ngung dieu khien, cue giu nguyen)
+//   Nut MISSING : ban cue MISSING va TRA quyen lai cho cam bien (ve che do tu dong)
+//
+// Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien tuc. Moi nut co bo
+// debounce rieng.
+//
+// Vi sao nut FULL phai CHOT chu khong chi ban 1 phat: dung tinh huong can nut nay nhat la khi
+// cam bien hong/offline, luc do requiredCount = 0 nen checkDistance() tinh ra MISSING - neu
+// khong chot thi cue FULL vua bam tay se bi may trang thai de nguoc lai sau confirmTimeMissing
+// (~2s), tuc nut vo dung dung luc can nhat.
+//
+// Vi sao bam MISSING tra ve tu dong la an toan: sau khi tra quyen, neu cam bien VAN hong thi
+// no cho ra MISSING - trung dung cue vua ban nen khong co gi bi bat lai. Neu cam bien song lai
+// thi no chay tiep binh thuong. Nghia la ke ca cam bien hong vinh vien, van chay duoc vo han
+// chu ky: bam FULL cho khach vao, bam MISSING khi xong, luot sau lap lai.
+//
+// LUU Y: 2 nut nay KHONG dung toi sensorEnabled[] (o tick Enable tung sensor tren Web UI, co
+// luu NVS). Chung chi lat manualOverride - hieu qua giong "tam ngung cam bien" nhung khong sua
+// cau hinh da luu cua operator.
 static void checkButtons()
 {
   struct Btn {
@@ -571,14 +585,19 @@ static void checkButtons()
 
       if (btns[i].state) { // chi xu ly luc VUA NHAN, bo qua luc nha
         bool wantFull = (i == 0);
-        manualOverride = true;
-        LOG(">>> NUT TAY: %s - vao CHE DO TAY, logic cam bien dung han, reboot de ve tu dong <<<",
-            wantFull ? "FULL" : "MISSING");
+        manualOverride = wantFull; // FULL = vao che do tay, MISSING = tra ve tu dong
+
         if (wantFull) {
+          LOG(">>> NUT TAY: FULL - vao CHE DO TAY, cam bien ngung dieu khien. Bam nut MISSING de tra ve tu dong <<<");
           triggerFull();
         } else {
+          LOG(">>> NUT TAY: MISSING - ban cue MISSING va TRA quyen lai cho cam bien (che do tu dong) <<<");
           triggerMissing();
         }
+
+        // Dong bo bookkeeping SAU khi da dat manualOverride: khi tra ve tu dong, buoc nay dat
+        // lastState/publishedState = false nen vong checkDistance() ke tiep khong thay lech
+        // gia va ban lai MISSING lan nua.
         syncStateMachineAfterManualTrigger(wantFull);
       }
     }
@@ -587,8 +606,9 @@ static void checkButtons()
 
 void checkDistance()
 {
-  // Che do tay: dung han logic cam bien, giu nguyen cue vua bam. Heartbeat van chay (nam o
-  // updateHeartbeat() trong loop()) nen cue tay van duoc nhac lai dinh ky nhu binh thuong.
+  // Che do tay (da bam nut FULL): dung han logic cam bien, giu nguyen cue vua bam. Heartbeat
+  // van chay (nam o updateHeartbeat() trong loop()) nen cue tay van duoc nhac lai dinh ky nhu
+  // binh thuong. Bam nut MISSING la thoat khoi day.
   if (manualOverride) {
     return;
   }

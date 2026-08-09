@@ -57,9 +57,10 @@ extern WiFiUDP oscUdp;
 #define RS485_TX -1
 
 // --- 2 nut nhan tay (INPUT_PULLUP, nhan = keo xuong mass) --------------------------------
-// Dung khi cam bien hong/offline ma van phai day show chay tiep. Bam la CHOT trang thai do
-// lai va TAM DUNG han logic cam bien - chi reboot board moi ve lai che do tu dong. Xem
-// checkButtons() va manualOverride trong cantim_mqtt_new.cpp.
+// Dung khi cam bien hong/offline ma van phai day show chay tiep. Mot chu ky show day du:
+//   Nut FULL    -> ban cue FULL va VAO che do tay (cam bien ngung dieu khien)
+//   Nut MISSING -> ban cue MISSING va TRA quyen lai cho cam bien
+// Xem checkButtons() va manualOverride trong cantim_mqtt_new.cpp.
 // GPIO 1/2 dang trong: ETH dung 10/11/12/13, relay 4/5/6/7, RS485_RX la RX (GPIO 44). Ca hai
 // deu khong phai chan strapping cua ESP32-S3 (0, 3, 45, 46).
 #define BTN_FULL_PIN 1        // nhan -> chot FULL
@@ -110,9 +111,9 @@ extern bool actionDone;
 extern bool publishedState;          // Trạng thái đã thực sự publish (MQTT/OSC) lần gần nhất
 extern unsigned long stateTimer;
 
-// true = đang ở CHẾ ĐỘ TAY (đã bấm 1 trong 2 nút). checkDistance() thoát ngay, logic cảm biến
-// dừng hẳn, cue giữ nguyên ở trạng thái vừa bấm. Chỉ reboot mới về tự động - cố ý không lưu
-// vào NVS để mất điện/reboot là trở lại bình thường.
+// true = đang ở CHẾ ĐỘ TAY (đã bấm nút FULL). checkDistance() thoát ngay, logic cảm biến dừng
+// hẳn, cue giữ nguyên ở FULL. Bấm nút MISSING để bắn cue MISSING và về lại tự động.
+// Cố ý KHÔNG lưu vào NVS: mất điện / reboot là trở lại tự động, không để lại bẫy cho ca sau.
 extern bool manualOverride;
 
 // Đồng bộ lại bookkeeping của máy trạng thái sau khi một cue được bắn từ bên ngoài (nút Test
