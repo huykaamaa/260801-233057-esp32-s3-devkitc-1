@@ -46,13 +46,50 @@ void handleRoot()
   html += "h2{text-align:center;margin:0 0 16px;color:#1565C0;}";
   html += "h3{margin:22px 0 12px;color:#1565C0;border-bottom:2px solid #dbeafe;padding-bottom:6px;}";
   html += ".panel{background:#f8fbff;border:1px solid #dbeafe;border-radius:12px;padding:14px;margin-bottom:14px;}";
+  // Tieu de panel keo sat 3 mep tren/trai/phai cua o: margin am PHAI dung bang padding cua
+  // .panel (14px) - doi padding do ma quen dong nay thi tieu de se thut vao hoac tran ra ngoai
+  // vien. Padding bu lai de chu van thang cot voi cac truong ben duoi, chi rieng duong gach
+  // chan (border-bottom o luat h3 chung) la chay het be ngang lam vach ngan cua panel.
+  html += ".panel h3{margin:-14px -14px 12px;padding:10px 14px 8px;}";
+  // Panel xo ra/thu vao: <summary> phai trong y het <h3> cua panel thuong, ke ca margin am
+  // -14px an khop voi padding cua .panel (xem ghi chu o tren).
+  html += ".panel details>summary{font-size:17px;font-weight:bold;color:#1565C0;border-bottom:2px solid #dbeafe;";
+  html += "margin:-14px -14px 12px;padding:10px 14px 8px;cursor:pointer;user-select:none;border-radius:11px 11px 0 0;}";
+  html += ".panel details>summary:hover{background:#eef5ff;}";
+  // Luc DONG, summary la toan bo noi dung panel: keo margin-bottom am de nuot not padding day
+  // cua .panel (khong thi thua 26px trong tron duoi tieu de), bo gach chan de khong chong len
+  // vien duoi cua panel thanh 2 vach, va bo tron ca 4 goc cho nen hover khong tran ra ngoai.
+  html += ".panel details:not([open])>summary{margin-bottom:-14px;border-bottom:none;border-radius:11px;}";
   html += ".sensor{border:1px solid #d8e3f0;border-radius:12px;padding:12px;margin-bottom:12px;background:#fbfdff;}";
   html += ".sensor-title{font-weight:bold;color:#0f4c81;margin-bottom:8px;}";
   html += ".row{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;}";
   html += ".field{flex:1;min-width:220px;}";
+  // Tieu de "Sensor N" khi nam trong .row: khong gian ra, khong co dan theo .field, va can
+  // GIUA theo chieu doc - cac .field cao hon no (nhan + o nhap) nen mac dinh align-items:
+  // stretch se dan chu len sat dinh, nhin nhu bi lech mot dong.
+  html += ".row .sensor-title{flex:0 0 auto;min-width:74px;margin-bottom:0;align-self:center;}";
+  // .row co margin-top:8px cho truong hop nam duoi mot dong khac; trong .sensor no la phan tu
+  // dau tien nen 8px do cong voi padding cua .sensor lam le tren day hon le duoi.
+  html += ".sensor .row{margin-top:0;}";
+  // O tick Enable chi co DUY NHAT mot nhan, khong co o nhap ben duoi nhu .field MIN/MAX - de
+  // mac dinh thi no dinh len dinh o va lech han so voi 2 o nhap ben canh. Bien chinh .field
+  // thanh flex de can giua ca 2 chieu; margin-bottom cua nhan phai bo, khong thi phan can giua
+  // theo chieu doc bi keo len 6px.
+  html += ".field.enable{display:flex;align-items:center;justify-content:center;}";
+  html += ".field.enable label{margin-bottom:0;}";
+  // Nhan MIN/MAX can giua tren o nhap cua chinh no. Gioi han trong .sensor: cac nhan khac cua
+  // form (MQTT IP, OSC Port...) van can trai nhu cu.
+  html += ".sensor .field label{text-align:center;}";
   html += ".field label,.single label{display:block;font-weight:bold;margin-bottom:6px;color:#556270;font-size:14px;}";
   html += ".field input,.single input{width:100%;padding:10px;border:1px solid #bfc9d6;border-radius:8px;font-size:15px;background:#fff;}";
-  html += ".field input[type=checkbox],.single input[type=checkbox]{width:auto;padding:0;margin-right:6px;transform:translateY(2px);}";
+  // type=radio phai duoc mien tru y het type=checkbox: luat .single input{width:100%;padding:10px;
+  // border:...} o tren ap cho MOI input, radio khong duoc liet ke o day se bi keo rong ca dong
+  // kem padding/vien, chu nhan day lech han sang mot ben.
+  html += ".field input[type=checkbox],.single input[type=checkbox],";
+  html += ".field input[type=radio],.single input[type=radio]{width:auto;padding:0;margin-right:6px;transform:translateY(2px);}";
+  // Nhan cua tung lua chon (radio/checkbox trong mot nhom) - khong dam, de phan biet voi nhan
+  // TIEU DE cua ca nhom von dam theo luat .single label o tren.
+  html += ".single label.opt{font-weight:normal;margin-bottom:4px;}";
   html += ".single{margin:10px 0;}";
   html += "#d{background:#eef7ff;border-left:5px solid #2196F3;padding:12px;border-radius:10px;margin-bottom:18px;line-height:1.7;}";
   html += ".btn{width:100%;padding:14px;border:none;border-radius:10px;background:#2196F3;color:white;font-size:16px;font-weight:bold;cursor:pointer;margin-top:8px;}";
@@ -97,13 +134,29 @@ void handleRoot()
   html += "<div id='tab-general' class='tab-content active'>";
   html += "<div class='panel'>";
   html += "<h3>Sensor Configuration</h3>";
+  html += "<div class='single'>";
+  html += "<label>Nguồn RS485</label>";
+  html += "<label class='opt'><input type='radio' name='rs485_src' value='main'";
+  html += rs485UseBackup ? "" : " checked";
+  html += "> Module chính (RX = GPIO ";
+  html += RS485_RX_MAIN;
+  html += ")</label>";
+  html += "<label class='opt'><input type='radio' name='rs485_src' value='backup'";
+  html += rs485UseBackup ? " checked" : "";
+  html += "> Module dự phòng (RX = GPIO ";
+  html += RS485_RX_BACKUP;
+  html += ")</label>";
+  html += "</div>";
+  html += "<div class='note'>Cả 3 sensor đọc từ module đang chọn, Save là áp dụng ngay (không cần reboot); chuyển sang module chưa cắm dây thì sau 5 giây cả 3 sensor báo OFFLINE.</div>";
   for (int i = 0; i < DEVICE_NUM; i++) {
     html += "<div class='sensor'>";
+    // Tieu de nam TRONG .row (khong phai mot dong rieng ben tren) de "Sensor N" thang hang voi
+    // o Enable/MIN/MAX cua chinh no - moi sensor gon lai con 1 dong thay vi 2.
+    html += "<div class='row'>";
     html += "<div class='sensor-title'>Sensor ";
     html += i + 1;
     html += "</div>";
-    html += "<div class='row'>";
-    html += "<div class='field'>";
+    html += "<div class='field enable'>";
     html += "<label><input type='checkbox' name='sensor";
     html += i;
     html += "' value='1'";
@@ -138,10 +191,38 @@ void handleRoot()
   html += missingThreshold;
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>1 = rớt 1 cái là MISSING ngay (mặc định, như trước giờ). 2 = rớt 1 vẫn còn FULL, rớt 2 mới MISSING. 3 = phải rớt cả 3 mới MISSING. Chỉ đếm các sensor đang tick Enable VÀ đang online - sensor OFFLINE bị loại khỏi phép đếm chứ không tính là rớt. Nếu số sensor online còn ít hơn ngưỡng này thì ngưỡng tự hạ xuống bằng số đó, tránh trường hợp không bao giờ MISSING được.</div>";
+  html += "<div class='note'>Chỉ đếm sensor đang Enable VÀ online (sensor OFFLINE bị loại, không tính là rớt); nếu số sensor online ít hơn ngưỡng thì ngưỡng tự hạ xuống bằng số đó.</div>";
   html += "</div>";
   html += "<div class='panel'>";
-  html += "<h3>MQTT Settings</h3>";
+  html += "<h3>Confirm Settings</h3>";
+  html += "<div class='single'>";
+  html += "<label>Confirm Time - FULL (ms)</label>";
+  html += "<input name='confirm' value='";
+  html += confirmTime;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='single'>";
+  html += "<label>Confirm Time - MISSING (ms)</label>";
+  html += "<input name='confirm_miss' value='";
+  html += confirmTimeMissing;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>Thời gian trạng thái phải giữ ổn định trước khi publish, tách riêng FULL/MISSING, giới hạn 50-60000ms.</div>";
+  html += "<div class='single'>";
+  html += "<label>Heartbeat - gửi lại cue định kỳ (ms, 0 = tắt)</label>";
+  html += "<input name='heartbeat' value='";
+  html += heartbeatInterval;
+  html += "'>";
+  html += "</div>";
+  html += "<div class='note'>Định kỳ bắn lại cue hiện tại để bù gói MQTT/OSC bị rớt, không đổi máy trạng thái - chỉ nhắc lại. 0 = tắt, giới hạn 5000-3600000ms.</div>";
+  html += "</div>";
+  html += "<div class='panel'>";
+  // <details>/<summary>: xo ra/thu vao khong can mot dong JS nao. Quan trong: cac o nhap nam
+  // trong <details> DANG DONG van thuoc form va van duoc gui khi bam Save - dong lai chi la an
+  // hien thi, khong go khoi DOM. Neu doi sang cach khac (vd tu xoa/them node) thi phai kiem
+  // lai diem nay, khong thi Save se am tham lam rong cau hinh MQTT/OSC.
+  html += "<details class='acc'>";
+  html += "<summary>MQTT Settings</summary>";
   html += "<div class='single'>";
   html += "<label><input type='checkbox' name='mqtt_enable' value='1'";
   html += mqttEnabled ? " checked" : "";
@@ -187,9 +268,11 @@ void handleRoot()
   html += htmlEscape(mqttMissingValue);
   html += "'>";
   html += "</div>";
+  html += "</details>";
   html += "</div>";
   html += "<div class='panel'>";
-  html += "<h3>OSC Settings</h3>";
+  html += "<details class='acc'>";
+  html += "<summary>OSC Settings</summary>";
   html += "<div class='single'>";
   html += "<label><input type='checkbox' name='osc_enable' value='1'";
   html += oscEnabled ? " checked" : "";
@@ -232,32 +315,11 @@ void handleRoot()
   html += "'>";
   html += "</div>";
   html += "<div class='note'>Set different OSC addresses and values for FULL and MISSING states.</div>";
+  html += "</details>";
   html += "</div>";
   html += "<div class='panel'>";
-  html += "<h3>Confirm Settings</h3>";
-  html += "<div class='single'>";
-  html += "<label>Confirm Time - FULL (ms)</label>";
-  html += "<input name='confirm' value='";
-  html += confirmTime;
-  html += "'>";
-  html += "</div>";
-  html += "<div class='single'>";
-  html += "<label>Confirm Time - MISSING (ms)</label>";
-  html += "<input name='confirm_miss' value='";
-  html += confirmTimeMissing;
-  html += "'>";
-  html += "</div>";
-  html += "<div class='note'>Thời gian trạng thái phải giữ ổn định trước khi publish, tách riêng cho FULL và MISSING. Cả 2 giới hạn trong khoảng 50-60000ms.</div>";
-  html += "<div class='single'>";
-  html += "<label>Heartbeat - gửi lại cue định kỳ (ms, 0 = tắt)</label>";
-  html += "<input name='heartbeat' value='";
-  html += heartbeatInterval;
-  html += "'>";
-  html += "</div>";
-  html += "<div class='note'>MQTT (QoS0) và OSC (UDP) đều không đảm bảo gửi tới nơi - nếu đúng lúc đổi trạng thái mà mạng chập chờn, bên nhận kẹt ở cue cũ cho tới lần đổi trạng thái kế tiếp (có thể là cả lượt khách). Heartbeat bắn lại cue hiện tại theo chu kỳ này để tự đồng bộ. Không đổi máy trạng thái, chỉ nhắc lại. Giới hạn 5000-3600000ms.</div>";
-  html += "</div>";
-  html += "<div class='panel'>";
-  html += "<h3>Relay Reset (khi sensor OFFLINE)</h3>";
+  html += "<details class='acc'>";
+  html += "<summary>Relay Reset (khi sensor OFFLINE)</summary>";
   html += "<div class='row'>";
   for (int p = 0; p < RELAY_PIN_COUNT; p++) {
     html += "<div class='field'>";
@@ -282,7 +344,8 @@ void handleRoot()
   html += relayPulseMs;
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Tick chọn chân GPIO (có thể tick nhiều chân cùng lúc để gộp dòng cho relay cần dòng lớn hơn 1 chân cấp được). Khi 1 sensor chuyển sang OFFLINE, các chân đã tick sẽ được kích đúng mức đã chọn trong đúng thời gian này rồi tự nhả về mức nghỉ - dùng để trigger relay cắt/nối lại nguồn cho các node vệ tinh RS485. Không tick chân nào = tắt tính năng này. Giá trị tự giới hạn trong khoảng 200-30000ms.</div>";
+  html += "<div class='note'>Khi 1 sensor chuyển sang OFFLINE, các chân đã tick được kích đúng thời gian này rồi tự nhả (tick nhiều chân để gộp dòng); không tick chân nào = tắt, giới hạn 200-30000ms.</div>";
+  html += "</details>";
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Admin Auth</h3>";
@@ -325,7 +388,7 @@ void handleRoot()
   html += htmlEscape(ethStaticNetmask);
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Mặc định: thiết bị thử DHCP trước (tối đa 10s lúc boot), chỉ dùng IP tĩnh này khi không có DHCP server. Tick \"Ưu tiên IP tĩnh\" để dùng IP tĩnh ngay từ đầu, bỏ qua hoàn toàn 10s chờ DHCP. Sau khi áp IP tĩnh, board <b>ping thử gateway</b> - không có hồi đáp thì coi như IP nhập sai mạng và tự lùi về DHCP. Nếu router chặn ICMP thì board sẽ lùi về DHCP một cách không cần thiết (chỉ chậm thêm ~10s, vẫn quay lại đúng IP tĩnh này nếu DHCP cũng không lên). Đổi giá trị ở đây không áp dụng ngay - cần reboot board (rút/cắm điện) để lần boot kế tiếp dùng cấu hình mới.</div>";
+  html += "<div class='note'>Mặc định thử DHCP 10s rồi mới dùng IP tĩnh; sau khi áp IP tĩnh board ping gateway để xác minh, sai mạng (hoặc router chặn ICMP) thì lùi về DHCP. Đổi ở đây phải reboot mới áp dụng.</div>";
   html += "</div>";
   html += "</div>"; // end tab-network
   html += "<input class='btn' type='submit' value='SAVE SETTINGS'>";
@@ -346,7 +409,7 @@ void handleRoot()
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Firmware Update (OTA)</h3>";
-  html += "<div class='note'>Chọn file firmware.bin (build từ PlatformIO: .pio/build/esp32-s3-devkitc-1/firmware.bin) rồi bấm Upload. Board tự khởi động lại sau khi nạp xong. KHÔNG rút nguồn/mất mạng giữa chừng - có thể phải nạp lại qua USB nếu hỏng.</div>";
+  html += "<div class='note'>Chọn firmware.bin rồi Upload, board tự khởi động lại; KHÔNG rút nguồn/mất mạng giữa chừng - hỏng thì phải nạp lại qua USB.</div>";
   html += "<form action='/update' method='POST' enctype='multipart/form-data' onsubmit=\"return confirm('Nạp firmware mới? Board sẽ khởi động lại sau khi xong.');\">";
   html += "<input type='file' name='firmware' accept='.bin' required style='width:100%;padding:10px;border:1px solid #bfc9d6;border-radius:8px;margin-bottom:8px;background:#fff'>";
   html += "<input class='btn' type='submit' value='Upload &amp; Update'>";
@@ -354,7 +417,7 @@ void handleRoot()
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Khởi động lại</h3>";
-  html += "<div class='note'>Reset mềm board (như rút/cắm nguồn). Cấu hình đã lưu KHÔNG mất. Board mất khoảng 15-20 giây để lên mạng lại - nếu trang chưa tải được thì đợi thêm rồi F5. Lưu ý: các node cảm biến vệ tinh KHÔNG bị reset theo, chỉ board này thôi.</div>";
+  html += "<div class='note'>Reset mềm board này thôi (node cảm biến vệ tinh KHÔNG reset theo), cấu hình đã lưu không mất, mất ~15-20 giây để lên mạng lại rồi F5.</div>";
   html += "<form action='/reboot' method='POST' onsubmit=\"return confirm('Khởi động lại board? Cảm biến và relay ngưng vài chục giây - đừng bấm khi khách đang chơi.');\">";
   html += "<input class='btn' type='submit' value='⟳ RESET ESP32'>";
   html += "</form>";

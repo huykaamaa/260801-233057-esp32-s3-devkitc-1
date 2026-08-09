@@ -83,11 +83,31 @@ void handleData() {
   // Che do tay phai hien that noi bat: dang o che do nay thi cam bien khong con dieu khien gi
   // ca, ma nhin vao badge FULL/MISSING thi khong the doan ra - operator se ngoi thac mac tai
   // sao dat vat len cam bien ma khong doi trang thai.
+  // Dem nguoc phai hien o dashboard: trong 5s khoa, bam nut KHONG co gi xay ra ca - khong co
+  // dong dem nguoc thi nguoi bam ket luan nut hong hoac day dien tuot, roi di mo tu kiem tra
+  // dung luc dang chay show. Dashboard tu refresh 250ms nen so nay chay that.
+  unsigned long sinceStep = millis() - manualStepAt;
+  bool manualCooling = (manualStepAt != 0) && (sinceStep < MANUAL_STEP_HOLD_MS);
+  String coolLeft = manualCooling ? String((MANUAL_STEP_HOLD_MS - sinceStep + 999UL) / 1000UL) : String("0");
+
   if (manualOverride) {
     data += "<div style='background:#fff3cd;border-left:5px solid #ff9800;padding:8px 10px;"
             "border-radius:8px;margin-bottom:8px'><b style='color:#e65100'>&#9888; CHẾ ĐỘ TAY</b>"
-            " - cue đang bị chốt ở FULL bằng nút nhấn, cảm biến KHÔNG điều khiển gì."
-            " Bấm nút <b>lần nữa</b> để bắn cue MISSING và trả quyền lại cho cảm biến.</div>";
+            " - cue đang bị chốt ở FULL bằng nút nhấn, cảm biến KHÔNG điều khiển gì.";
+    if (manualCooling) {
+      data += " <b style='color:#e65100'>Còn " + coolLeft + "s nữa mới thoát được</b>"
+              " - bấm bây giờ sẽ không có tác dụng.";
+    } else {
+      data += " Bấm nút <b>lần nữa</b> để bắn cue MISSING và trả quyền lại cho cảm biến.";
+    }
+    data += "</div>";
+  } else if (manualCooling) {
+    // Vua thoat che do tay xong: khong con bang canh bao cam nao ca, nen neu khong bao o day
+    // thi cu bam kich FULL lai trong 5s dau se im lang khong ly do - dung cai bay ma bang dem
+    // nguoc o tren sinh ra de tranh.
+    data += "<div style='background:#eef2f7;border-left:5px solid #90a4ae;padding:8px 10px;"
+            "border-radius:8px;margin-bottom:8px'>&#8987; <b>Nút tay:</b> vừa bắn cue MISSING,"
+            " còn <b>" + coolLeft + "s</b> nữa mới kích FULL lại được.</div>";
   }
 
   data += "<b>STATUS:</b> ";
@@ -110,6 +130,12 @@ void handleData() {
   data += "<br>Trong ngưỡng: <b>" + String(okCount) + "/" + String(onlineCount) + "</b> sensor online";
   data += " &nbsp;|&nbsp; rớt <b>" + String(onlineCount - okCount) + "</b>";
   data += ", MISSING khi rớt <b>" + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
+  // Nguon RS485 phai hien o dashboard chu khong chi trong form: luc ca 3 sensor bao OFFLINE,
+  // cau hoi dau tien la "dang nghe module nao" - khong thay o day thi phai mo tab Cau hinh
+  // moi biet, dung luc dang chua chay show.
+  data += "<br>Nguồn RS485: <b>";
+  data += rs485UseBackup ? "DỰ PHÒNG" : "CHÍNH";
+  data += "</b> (GPIO " + String(rs485ActiveRxPin()) + ")";
   data += "<br><br>";
 
   for (int i = 0; i < DEVICE_NUM; i++) {
@@ -404,6 +430,18 @@ void handleSave() {
   }
 
   ethUseStaticFirst = server.hasArg("eth_static_first");
+
+  // Radio chu khong phai checkbox: trinh duyet luon gui dung 1 gia tri, nen khong co kieu "vang
+  // mat = false" nhu cac tick o tren. Chi mo lai UART khi gia tri THAT SU doi - bam Save cho mot
+  // thay doi khac (vd doi nguong MQTT) ma cung end()+begin() lai RS485 thi lam rot mat may
+  // dong dang tren duong truyen chang de lam gi.
+  if (server.hasArg("rs485_src")) {
+    bool wantBackup = (server.arg("rs485_src") == "backup");
+    if (wantBackup != rs485UseBackup) {
+      rs485UseBackup = wantBackup;
+      rs485ApplyRxPin();
+    }
+  }
 
   for (int p = 0; p < RELAY_PIN_COUNT; p++) {
     relayPinEnabled[p] = server.hasArg("relay_p" + String(p));

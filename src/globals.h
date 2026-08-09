@@ -53,19 +53,57 @@ extern WiFiUDP oscUdp;
 #define ETH_SCK  12
 #define ETH_INT  -1
 #define ETH_RST  -1
-#define RS485_RX RX
+// --- 2 module RS485: CHINH tren GPIO 42, DU PHONG tren GPIO 18 ---------------------------
+// Chi MOT module duoc doc tai mot thoi diem - chon tren Web UI (radio "Nguon RS485", panel
+// Sensor Configuration), luu NVS key "rs485_bk". Doi nguon = RS485.end() + begin() lai tren
+// chan moi ngay trong handleSave(), KHONG can reboot.
+//
+// GPIO 42 = MTMS, mot trong 4 chan JTAG ngoai (39/40/41/42). Mac dinh ESP32-S3 dung USB
+// Serial/JTAG tich hop chu khong dung 4 chan nay, nen 42 la GPIO thuong - chi bi chiem neu co
+// ai do dot eFuse JTAG_SEL_ENABLE de chuyen sang JTAG qua chan ngoai. Khong phai chan strapping
+// (0, 3, 45, 46), khong dinh SPI flash noi (26-32) hay PSRAM octal (33-37).
+#define RS485_RX_MAIN   42
+#define RS485_RX_BACKUP 18
+
+// -1 = khong gan chan TX. Thiet bi CHI NGHE: node cam bien tu day so do len, firmware khong
+// bao gio phat gi ra bus ca. Giu -1 de UART khong chiem mot chan chang de lam gi, va de khong
+// co duong nao lo phat vao bus ban song cong dung chung.
 #define RS485_TX -1
 
-// --- 1 nut nhan tay (INPUT_PULLUP, nhan = keo xuong mass) --------------------------------
+// false = dang doc module CHINH (GPIO 42), true = module DU PHONG (GPIO 18).
+extern bool rs485UseBackup;
+uint8_t rs485ActiveRxPin();
+void rs485ApplyRxPin();   // end() + begin() lai RS485 tren chan dang duoc chon
+
+// --- 2 nut nhan tay SONG SONG (INPUT_PULLUP, nhan = keo xuong mass) ----------------------
 // Dung khi cam bien hong/offline ma van phai day show chay tiep. Bam luan phien:
 //   dang TU DONG   -> bam: ban cue FULL va VAO che do tay (cam bien ngung dieu khien)
 //   dang CHE DO TAY -> bam: ban cue MISSING va TRA quyen lai cho cam bien
+// Hai nut CHUC NANG Y HET NHAU (dat 2 vi tri khac nhau trong phong), bam nut nao cung di
+// mot buoc trong cung chu ky do - khong phai nut nay FULL nut kia MISSING.
 // Xem checkButtons() va manualOverride trong cantim_mqtt_new.cpp.
-// GPIO 1 dang trong: ETH dung 10/11/12/13, relay 4/5/6/7, RS485_RX la RX (GPIO 44). Cung khong
-// phai chan strapping cua ESP32-S3 (0, 3, 45, 46).
-#define BTN_MANUAL_PIN 1
+// GPIO 1 va 2 dang trong: ETH dung 10/11/12/13, relay 4/5/6/7, RS485 dung 42 (chinh) va 18
+// (du phong). Ca hai deu khong phai chan strapping cua ESP32-S3 (0, 3, 45, 46).
+#define BTN_MANUAL_COUNT 2
+#define BTN_MANUAL_PIN  1
+#define BTN_MANUAL_PIN2 2
 #define BTN_ACTIVE LOW
 #define BTN_DEBOUNCE_MS 50UL
+
+// Khoang cach toi thieu giua HAI buoc bam tay lien tiep, CA HAI CHIEU: bam vao che do tay
+// (cue FULL) roi phai cho ngan nay moi thoat (cue MISSING) duoc, va thoat xong cung phai cho
+// ngan nay moi kich FULL lai duoc. Bam trong khoang nay bi BO QUA hoan toan.
+//
+// Ly do: gio co 2 nut dat 2 cho, mot cu bam nhan hai lan hoac hai nguoi cung bam se ban 2 cue
+// nguoc nhau cach nhau vai phan giay - ben nhan cue coi nhu chua tung co cue dau. Chieu quay
+// lai FULL con them mot ly do nua: cue MISSING vua ban ra thuong la de dong canh/tra phong ve
+// trang thai cho, dap FULL de len ngay se cat ngang chinh cai hieu ung do.
+#define MANUAL_STEP_HOLD_MS 5000UL
+
+// millis() cua buoc bam tay duoc CHAP NHAN gan nhat (ca chieu vao lan chieu ra). 0 = chua co
+// buoc nao ke tu luc boot, luc do khong khoa gi - neu khong thi 5 giay dau sau khi cap dien
+// nut se cam nhu hong.
+extern unsigned long manualStepAt;
 
 extern esp_mqtt_client_handle_t mqtt;
 extern bool mqttConnected;

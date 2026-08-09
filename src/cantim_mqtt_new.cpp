@@ -19,7 +19,9 @@
 
 SPIClass spi(FSPI);
 WebServer server(80);                // Web server chạy trên cổng 80
-HardwareSerial RS485(1);             // UART1 dùng cho RS485
+// UART2 dùng cho RS485. Một UART duy nhất cho CẢ HAI module (chính GPIO 42 / dự phòng GPIO
+// 18) — đổi module là gán lại chân RX, xem rs485ApplyRxPin() và globals.h.
+HardwareSerial RS485(2);
 Preferences prefs;                   // Lưu cấu hình không mất khi tắt
 WiFiUDP oscUdp;
 
@@ -50,6 +52,8 @@ int oscValueMissing = 0;
 char authUser[32] = "admin";  // Web UI Basic Auth username (F6) - change via Admin Auth panel
 char authPass[32] = "admin";  // Web UI Basic Auth password (F6) - change via Admin Auth panel
 
+bool rs485UseBackup = false;        // Xem globals.h - false = module chinh (GPIO 42)
+
 int rsDistance[DEVICE_NUM];         // Khoảng cách hiện tại của mỗi sensor
 unsigned long lastRS485[DEVICE_NUM]; // Thời điểm nhận dữ liệu cuối từ sensor
 bool sensorEnabled[DEVICE_NUM] = {true, true, true};
@@ -58,6 +62,7 @@ int distanceMin[DEVICE_NUM] = {200, 200, 200}; // Ngưỡng min của mỗi sens
 int distanceMax[DEVICE_NUM] = {800, 800, 800}; // Ngưỡng max của mỗi sensor
 int missingThreshold = 1;                      // Xem globals.h. 1 = hành vi cũ
 bool manualOverride = false;        // Xem globals.h - true = đã bấm nút tay, logic cảm biến dừng
+unsigned long manualStepAt = 0;     // Xem globals.h - millis() của bước bấm tay gần nhất
 bool lastState = false;             // Trạng thái đầy/vắng trước đó (raw, dùng để debounce)
 bool actionDone = false;            // Đã gửi hành động MQTT chưa (cho lastState hiện tại)
 bool publishedState = false;        // Trạng thái đã thực sự trigger/publish lần gần nhất (khác lastState!)
@@ -225,6 +230,27 @@ static void startDiagAp(bool isFallback)
   }
 }
 
+uint8_t rs485ActiveRxPin()
+{
+  return rs485UseBackup ? RS485_RX_BACKUP : RS485_RX_MAIN;
+}
+
+// Mo lai UART tren chan dang duoc chon. Goi luc boot (sau khi doc NVS) va moi lan operator
+// doi nguon tren Web UI - mot UART duy nhat duoc dung lai chu khong mo song song 2 cai, dung
+// nghia "chon 1 trong 2 module".
+//
+// KHONG dung vao lastRS485[]: sau khi doi nguon, neu module moi khong co du lieu that thi cac
+// sensor phai roi sang OFFLINE theo dung RS485_TIMEOUT nhu moi truong hop mat tin hieu khac.
+// Lam gia lastRS485[] = millis() cho "de nhin" se khien rsDistance[] cu - so do cua module
+// VUA BI BO - duoc tinh nhu du lieu song them 5 giay nua va co the lat FULL/MISSING sai.
+void rs485ApplyRxPin()
+{
+  RS485.end();
+  RS485.begin(115200, SERIAL_8N1, rs485ActiveRxPin(), RS485_TX);
+  LOG("RS485: doc module %s (RX = GPIO %u)",
+      rs485UseBackup ? "DU PHONG" : "CHINH", (unsigned)rs485ActiveRxPin());
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -232,8 +258,6 @@ void setup()
   while (!Serial && (millis() - serialStart) < 2000) {
     delay(10);
   }
-
-  RS485.begin(115200, SERIAL_8N1, RS485_RX, RS485_TX);
 
   if (!prefs.begin(NVS_KEY("distance"), false)) {
     LOG("NVS: prefs.begin(distance) FAILED - using in-RAM defaults, config NOT loaded from flash");
@@ -319,8 +343,15 @@ void setup()
     relayActiveHigh = prefs.getBool(NVS_KEY("relay_hi"), relayActiveHigh);
     relayPulseMs = prefs.getULong(NVS_KEY("relay_ms"), relayPulseMs);
 
+    rs485UseBackup = prefs.getBool(NVS_KEY("rs485_bk"), rs485UseBackup);
+
     prefs.end();
   }
+
+  // SAU khi doc NVS: chan RX phu thuoc rs485UseBackup vua load, mo som hon thi lan nao boot
+  // voi module du phong cung phai end()+begin() lai ngay - thua va de nguoi doc tuong chan
+  // chinh moi la chan that su dang dung.
+  rs485ApplyRxPin();
 
   // F6: a fresh/unconfigured device is otherwise silently insecure with nobody ever told -
   // log this plainly and unconditionally at every boot while defaults are still in effect,
@@ -332,8 +363,9 @@ void setup()
 
   relayInit();
 
-  // Nut nhan tay - INPUT_PULLUP, nhan = keo xuong mass (xem checkButtons()).
-  pinMode(BTN_MANUAL_PIN, INPUT_PULLUP);
+  // 2 nut nhan tay song song - INPUT_PULLUP, nhan = keo xuong mass (xem checkButtons()).
+  pinMode(BTN_MANUAL_PIN,  INPUT_PULLUP);
+  pinMode(BTN_MANUAL_PIN2, INPUT_PULLUP);
 
   WiFi.onEvent(WiFiEvent);
   spi.begin(ETH_SCK, ETH_MISO, ETH_MOSI, ETH_CS);
@@ -537,7 +569,9 @@ void syncStateMachineAfterManualTrigger(bool state)
   cuePublished = true;
 }
 
-// MOT nut nhan tay, bam luan phien qua lai - van dung chu ky cu, chi gop 2 nut thanh 1:
+// HAI nut nhan tay SONG SONG (BTN_MANUAL_PIN / BTN_MANUAL_PIN2), chuc nang y het nhau - dat
+// 2 vi tri khac nhau trong phong cho tien tay. Bam nut nao cung di mot buoc trong CUNG mot
+// chu ky luan phien duoi day (khong phai nut nay FULL, nut kia MISSING):
 //
 //   Dang TU DONG -> bam: ban cue FULL va VAO che do tay (cam bien ngung dieu khien)
 //   Dang CHE DO TAY -> bam: ban cue MISSING va TRA quyen lai cho cam bien
@@ -548,6 +582,9 @@ void syncStateMachineAfterManualTrigger(bool state)
 // tiep mot buoc trong chu ky tay", va dashboard bao ro dang o nua nao.
 //
 // Bat SUON XUONG (nhan) chu khong doc muc - giu nut khong bao gio ban lien tuc.
+//
+// Hai buoc bam lien tiep phai cach nhau it nhat MANUAL_STEP_HOLD_MS (5s), ca chieu vao lan
+// chieu ra - xem manualToggleStep().
 //
 // Vi sao buoc FULL phai CHOT chu khong chi ban 1 phat: dung tinh huong can nut nay nhat la khi
 // cam bien hong/offline, luc do requiredCount = 0 nen checkDistance() tinh ra MISSING - neu
@@ -562,38 +599,71 @@ void syncStateMachineAfterManualTrigger(bool state)
 // LUU Y: nut nay KHONG dung toi sensorEnabled[] (o tick Enable tung sensor tren Web UI, co luu
 // NVS). No chi lat manualOverride - hieu qua giong "tam ngung cam bien" nhung khong sua cau
 // hinh da luu cua operator.
-static void checkButtons()
+// Mot buoc trong chu ky tay. Tach rieng vi CA HAI nut deu goi vao day - hai nut la 2 vi tri
+// bam khac nhau cua cung mot chuc nang, khong phai 2 chuc nang.
+static void manualToggleStep()
 {
-  static bool btnState = !BTN_ACTIVE;   // muc da debounce
-  static bool btnReading = !BTN_ACTIVE; // muc doc duoc gan nhat
-  static unsigned long btnTimer = 0;
+  bool wantFull = !manualOverride;  // dang tu dong -> vao tay (FULL); dang tay -> ra (MISSING)
 
-  bool raw = (digitalRead(BTN_MANUAL_PIN) == BTN_ACTIVE);
-
-  if (raw != btnReading) {
-    btnReading = raw;
-    btnTimer = millis();
+  // Khoa CA HAI CHIEU trong MANUAL_STEP_HOLD_MS ke tu buoc bam gan nhat (xem globals.h). Tru
+  // unsigned nen an toan qua moc millis() tran ve 0. manualStepAt == 0 = chua bam lan nao ke
+  // tu boot: khong khoa, neu khong thi 5 giay dau sau khi cap dien nut se cam nhu hong.
+  //
+  // Bo qua han chu khong xep hang lai: nguoi bam nhin dashboard thay dem nguoc va tu bam lai,
+  // con neu de danh roi tu ban sau 5s thi cue bat ra luc khong ai cham vao nut - kho hieu hon
+  // nhieu, va dung kieu cue "ma" ma ca phong khong biet tu dau ra.
+  if (manualStepAt != 0 && (millis() - manualStepAt) < MANUAL_STEP_HOLD_MS) {
+    LOG("NUT TAY: bo qua - buoc bam truoc moi cach %lums, phai du %lums moi bam tiep duoc",
+        millis() - manualStepAt, MANUAL_STEP_HOLD_MS);
+    return;
   }
 
-  if (millis() - btnTimer >= BTN_DEBOUNCE_MS && btnState != btnReading) {
-    btnState = btnReading;
+  manualOverride = wantFull;
+  manualStepAt = millis();
 
-    if (btnState) { // chi xu ly luc VUA NHAN, bo qua luc nha
-      bool wantFull = !manualOverride;  // dang tu dong -> vao tay (FULL); dang tay -> ra (MISSING)
-      manualOverride = wantFull;
+  if (wantFull) {
+    LOG(">>> NUT TAY: FULL - vao CHE DO TAY, cam bien ngung dieu khien. Sau %lus bam lan nua de ban MISSING va tra ve tu dong <<<",
+        MANUAL_STEP_HOLD_MS / 1000UL);
+    triggerFull();
+  } else {
+    LOG(">>> NUT TAY: MISSING - ban cue MISSING va TRA quyen lai cho cam bien (che do tu dong). Sau %lus moi kich FULL lai duoc <<<",
+        MANUAL_STEP_HOLD_MS / 1000UL);
+    triggerMissing();
+  }
 
-      if (wantFull) {
-        LOG(">>> NUT TAY: FULL - vao CHE DO TAY, cam bien ngung dieu khien. Bam lan nua de ban MISSING va tra ve tu dong <<<");
-        triggerFull();
-      } else {
-        LOG(">>> NUT TAY: MISSING - ban cue MISSING va TRA quyen lai cho cam bien (che do tu dong) <<<");
-        triggerMissing();
+  // Dong bo bookkeeping SAU khi da dat manualOverride: khi tra ve tu dong, buoc nay dat
+  // lastState/publishedState = false nen vong checkDistance() ke tiep khong thay lech gia
+  // va ban lai MISSING lan nua.
+  syncStateMachineAfterManualTrigger(wantFull);
+}
+
+static void checkButtons()
+{
+  // Moi nut co bo debounce RIENG, khong OR chung muc doc cua 2 chan. Neu OR, mot nut bi chap
+  // hoac ket o muc nhan se ghim duong tin hieu o active vinh vien va nut con lai khong bao gio
+  // tao duoc suon nua - hong dung cai thu duy nhat cuu duoc show khi cam bien da chet. Tach
+  // rieng thi nut ket chi ban 1 lan roi im, nut kia van bam binh thuong.
+  static const uint8_t pins[BTN_MANUAL_COUNT] = { BTN_MANUAL_PIN, BTN_MANUAL_PIN2 };
+  // Khoi tao o muc !BTN_ACTIVE (= "dang nhan") co chu dich: neu nut bi giu/chap ngay luc boot
+  // thi khong co suon xuong nao duoc sinh ra, thiet bi khong tu ban cue luc khoi dong.
+  static bool btnState[BTN_MANUAL_COUNT]   = { !BTN_ACTIVE, !BTN_ACTIVE }; // muc da debounce
+  static bool btnReading[BTN_MANUAL_COUNT] = { !BTN_ACTIVE, !BTN_ACTIVE }; // muc doc gan nhat
+  static unsigned long btnTimer[BTN_MANUAL_COUNT] = { 0, 0 };
+
+  for (uint8_t i = 0; i < BTN_MANUAL_COUNT; i++) {
+    bool raw = (digitalRead(pins[i]) == BTN_ACTIVE);
+
+    if (raw != btnReading[i]) {
+      btnReading[i] = raw;
+      btnTimer[i] = millis();
+    }
+
+    if (millis() - btnTimer[i] >= BTN_DEBOUNCE_MS && btnState[i] != btnReading[i]) {
+      btnState[i] = btnReading[i];
+
+      if (btnState[i]) { // chi xu ly luc VUA NHAN, bo qua luc nha
+        manualToggleStep();
       }
-
-      // Dong bo bookkeeping SAU khi da dat manualOverride: khi tra ve tu dong, buoc nay dat
-      // lastState/publishedState = false nen vong checkDistance() ke tiep khong thay lech gia
-      // va ban lai MISSING lan nua.
-      syncStateMachineAfterManualTrigger(wantFull);
     }
   }
 }
@@ -813,6 +883,8 @@ int saveDistanceConfig()
   }
   checkFixed(prefs.putBool(NVS_KEY("relay_hi"), relayActiveHigh), "relay_hi");
   checkFixed(prefs.putULong(NVS_KEY("relay_ms"), relayPulseMs), "relay_ms");
+
+  checkFixed(prefs.putBool(NVS_KEY("rs485_bk"), rs485UseBackup), "rs485_bk");
 
   checkFixed(prefs.putUInt(NVS_KEY("cfg_ver"), CFG_VERSION), "cfg_ver");
 

@@ -39,6 +39,25 @@ Từ bản cập nhật này, các thao tác **thay đổi cấu hình/trạng t
 
 ## 2. Sensor Configuration
 
+### Nguồn RS485 — chọn module chính / dự phòng (2026-08-09)
+
+Thiết bị có **2 module RS485** cắm sẵn, nhưng **chỉ đọc một cái tại một thời điểm**:
+
+| Lựa chọn | Chân RX |
+|---|---|
+| **Module chính** | GPIO 42 |
+| **Module dự phòng** | GPIO 18 |
+
+Chọn bằng radio ngay đầu panel Sensor Configuration rồi bấm **SAVE SETTINGS** — áp dụng **ngay lập tức, không cần khởi động lại**. Lựa chọn được lưu vào bộ nhớ, mất điện bật lại vẫn giữ nguyên module đang chọn.
+
+Cả 3 sensor đều đọc từ module đang chọn — không chia mỗi sensor một module. Thiết bị **chỉ nghe**, không phát gì ra bus RS485.
+
+**Đang nghe module nào** hiện luôn ở ô trạng thái trên cùng (dòng "Nguồn RS485"), khỏi phải mở tab Cấu hình để kiểm tra.
+
+> **Lưu ý khi chuyển sang module chưa cắm dây:** sau 5 giây không có dữ liệu, cả 3 sensor sẽ báo `OFFLINE`, kèm cảnh báo MQTT `SENSOR_x_OFFLINE` và **một xung relay reset nguồn** (nếu đã bật panel Relay Reset) — giống hệt mọi lần mất tín hiệu khác. Đây là phản ứng đúng, không phải lỗi. Chuyển lại module còn sống là hết.
+
+### Ngưỡng từng sensor
+
 Mỗi sensor (hiện có 3 sensor) có:
 
 | Trường | Ý nghĩa |
@@ -167,6 +186,28 @@ Tính năng tự động kích relay để cắt/nối lại nguồn cho các no
 **Nút Test Relay** (mục 7 bên dưới) dùng để kích thử thủ công, kiểm tra đấu dây đúng trước khi chờ sự cố thật xảy ra.
 
 ⚠️ Đây là tính năng phần cứng thật — sai đấu dây hoặc chọn sai mức HIGH/LOW có thể khiến relay hoạt động không đúng ý muốn. Nên dùng nút **Test Relay** để kiểm tra kỹ trước khi để hệ thống tự vận hành không giám sát.
+
+---
+
+## 5e. Nút nhấn tay — 2 nút, cùng một chức năng (2026-08-09)
+
+Dùng khi cảm biến hỏng/offline mà vẫn phải đẩy show chạy tiếp. Có **2 nút đặt ở 2 chỗ khác nhau**, **chức năng y hệt nhau** — không phải nút này FULL nút kia MISSING. Bấm nút nào cũng đi một bước trong cùng chu kỳ:
+
+1. Đang **TỰ ĐỘNG** → bấm: bắn cue **FULL** và **vào chế độ tay** (cảm biến ngừng điều khiển, cue chốt ở FULL).
+2. Đang **CHẾ ĐỘ TAY** → bấm: bắn cue **MISSING** và **trả quyền lại cho cảm biến**.
+
+Đang ở chế độ tay thì ô trạng thái hiện băng cảnh báo màu cam **"⚠ CHẾ ĐỘ TAY"**.
+
+> **Hai lần bấm phải cách nhau 5 giây** — cả chiều vào lẫn chiều ra:
+>
+> - Vừa kích **FULL** → phải đợi 5s mới thoát được. Băng cảnh báo cam hiện đếm ngược *"Còn Ns nữa mới thoát được"*, hết giờ tự đổi lại thành *"Bấm nút lần nữa..."*.
+> - Vừa kích **MISSING** (thoát ra) → phải đợi 5s mới kích FULL lại được. Lúc này hiện băng xám *"⌛ Nút tay: vừa bắn cue MISSING, còn Ns nữa mới kích FULL lại được"*.
+>
+> Bấm trong khoảng khoá là **không có tác dụng gì cả** — không phải nút hỏng, cứ nhìn đếm ngược rồi bấm lại. Có 2 nút đặt 2 chỗ nên một cú bấm nhân hai lần, hoặc hai người cùng bấm, sẽ bắn 2 cue ngược nhau cách nhau vài phần giây và bên nhận cue coi như chưa từng có cue đầu.
+>
+> Riêng 5 giây đầu **sau khi cấp điện** thì không khoá gì — bấm được ngay.
+
+Chế độ tay **cố ý không lưu vào bộ nhớ**: mất điện hoặc reboot là trở lại tự động, không để lại bẫy cho ca sau.
 
 ---
 
