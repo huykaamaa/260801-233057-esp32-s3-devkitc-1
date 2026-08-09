@@ -236,6 +236,51 @@ Sau khi bấm Test MQTT/Test OSC, ô trạng thái realtime sẽ phản ánh đ�
 
 ---
 
+## 7b. Firmware Update (OTA) — 2 cách (2026-08-10)
+
+Cả hai cách đều yêu cầu đăng nhập, và board **tự khởi động lại** sau khi nạp xong.
+
+### Cách 1 — chọn file rồi Upload
+
+Cách cũ, không cần chuẩn bị gì. Chọn `firmware.bin` từ máy rồi bấm **Upload & Update**.
+
+### Cách 2 — nạp từ link (tiện khi nạp nhiều board)
+
+Board tự tải `firmware.bin` về từ một URL đã lưu. Không phải chọn file cho từng board.
+
+**Chuẩn bị máy phát file** — một server duy nhất phục vụ cả 3 phòng:
+
+```bash
+python -m http.server 8000 -d C:/fw
+```
+
+Thư mục `C:\fw\` được `tools/copy_fw.py` tự đổ file vào sau **mỗi lần build** (cấu hình trong `platformio.ini`, xem `custom_fw_name`). Cả 3 project dùng chung tên env `esp32-s3-devkitc-1` nên đường dẫn `.pio/build/...` của chúng giống hệt nhau — phải đổi tên theo phòng thì URL mới không đụng nhau:
+
+```
+http://<IP-máy-bạn>:8000/cantim.bin      ← phòng này
+http://<IP-máy-bạn>:8000/giasach.bin
+http://<IP-máy-bạn>:8000/datthe.bin
+```
+
+`pio run` xong là file mới nằm sẵn ở đúng URL đó, không phải copy tay.
+
+> ⚠️ **Không có gì ngăn nạp nhầm firmware phòng khác.** Nạp `giasach.bin` vào board Cân Tim thì nó vẫn ghi flash và boot bình thường, nhưng sơ đồ chân khác nhau nên relay sẽ kích lung tung. URL chỉ nhập một lần lúc cấu hình nên cửa sổ rủi ro hẹp — nhưng kiểm lại tên file trước khi bấm Lưu.
+
+**Trên Web UI:** dán URL vào ô rồi bấm **Lưu URL** (chỉ ghi vào bộ nhớ, không nạp). Từ đó về sau chỉ cần bấm **Nạp từ link**. Quá trình mất khoảng 20-40 giây, trang tự quay về sau 45 giây.
+
+| Lỗi thường gặp | Nguyên nhân |
+|---|---|
+| Bấm Lưu URL báo "phải bắt đầu bằng http://" | Đang dán link `https://`. Không hỗ trợ HTTPS — xem ghi chú bên dưới. |
+| Serial báo lỗi kết nối, board không tải được | Windows Firewall chặn port 8000. Thử mở `http://<IP>:8000/` từ điện thoại cùng mạng: không vào được thì cho `python.exe` qua firewall ở profile Private. |
+| Báo lỗi HTTP 404 | Sai đường dẫn trong URL, hoặc `C:\fw\cantim.bin` chưa có. Mở đúng URL đó bằng trình duyệt để kiểm tra trước. |
+| Nạp xong mà mã FW không đổi | Build không chạy lại thì bước copy cũng không chạy (SCons chỉ chạy post-action khi target được build lại) — file trong `C:\fw` vẫn là bản cũ. Sửa một file bất kỳ rồi build lại, hoặc `pio run -t clean`. |
+
+> **Chỉ hỗ trợ `http://`.** HTTPS cần thư viện TLS kèm chứng chỉ, tốn thêm ~100KB flash và thêm nhiều kiểu lỗi khó đoán; trong mạng show khép kín thì không đáng. Link `https://` bị từ chối ngay lúc Lưu chứ không để thất bại giữa lúc đang tải.
+
+> ⚠️ **Ai kiểm soát được URL đó thì kiểm soát được firmware của board.** Chỉ trỏ vào máy trong mạng nội bộ, đừng trỏ ra Internet qua HTTP trần.
+
+---
+
 ## 8. Xử lý sự cố nhanh
 
 | Hiện tượng | Kiểm tra |

@@ -204,6 +204,38 @@ extern bool relayPinEnabled[RELAY_PIN_COUNT];     // Chan nao duoc tick chon tre
 extern bool relayActiveHigh;                       // true = kich muc HIGH, false = kich muc LOW
 extern unsigned long relayPulseMs;                 // Giu muc kich bao lau (ms) truoc khi tu nha ve muc nghi
 
+// --- Ma nhan dang ban firmware dang chay (2026-08-10) ------------------------------------
+// Tinh tu CHINH anh da nap (ESP.getSketchMD5()), khong phai tu macro __DATE__/__TIME__.
+// Ly do: PlatformIO chi bien dich lai file nao thay doi, nen dau thoi gian compile nam trong
+// web.cpp se giu nguyen gia tri CU neu lan build do chi sua html.cpp - tuc no sai dung luc can
+// no nhat, la luc kiem tra xem OTA da that su doi firmware chua. MD5 doc tu flash thi khong
+// bao gio noi doi: byte khac nhau la ma khac nhau.
+//
+// Tinh 1 lan trong setup() roi cache: getSketchMD5() phai doc het ~1.2MB flash, khong the goi
+// moi lan /data (dashboard poll 4 lan/giay).
+extern char fwId[9];      // 8 ky tu dau cua MD5 sketch
+extern uint32_t fwSize;   // kich thuoc sketch (byte)
+void fwIdInit();
+
+// --- OTA tu URL (2026-08-10) --------------------------------------------------------------
+// Thay vi chon file upload qua form, board TU TAI firmware.bin ve tu mot URL da luu san (NVS
+// key "ota_url") roi tu ghi flash va reboot. Tien khi phai nap nhieu board giong nhau: bat mot
+// HTTP server trong LAN, moi board chi con mot nut bam.
+//
+// CHI HO TRO http:// - https:// can NetworkClientSecure kem chung chi, ton them ~100KB flash va
+// them may kieu loi kho doan; trong mang show khep kin thi khong dang. handleUpdateUrl() TU CHOI
+// thang https:// ngay luc luu, thay vi de no that bai luc dang tai.
+//
+// BAO MAT: ai kiem soat duoc URL nay thi kiem soat duoc firmware cua board. Chi tro vao may
+// trong mang noi bo, dung tro ra Internet qua HTTP tran.
+extern char otaUrl[96];
+
+// Dat true tu handleUpdateUrl(); otaUrlTick() trong loop() moi thuc su tai. KHONG goi
+// httpUpdate.update() thang trong handler: no chan 10-30 giay roi reboot giua chung, response
+// chua kip ra khoi socket nen trinh duyet bao loi mang du update chay dung.
+extern bool otaUrlPending;
+void otaUrlTick();
+
 // Returns the number of failed put*() calls (0 = fully saved), or -1 if
 // prefs.begin() itself failed (namespace could not be opened, nothing was written).
 int saveDistanceConfig();
