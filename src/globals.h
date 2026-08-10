@@ -160,10 +160,25 @@ void syncStateMachineAfterManualTrigger(bool state);
 extern int distanceMin[DEVICE_NUM];
 extern int distanceMax[DEVICE_NUM];
 
-// Bao nhiêu sensor phải RỚT (ra ngoài ngưỡng min/max) thì mới chuyển sang MISSING.
-// 1 = hành vi cũ (rớt 1 cái là MISSING ngay). 2 = rớt 1 cái vẫn còn FULL, rớt 2 mới MISSING.
-// Chỉ tính trên các sensor đang enable VÀ đang online - sensor offline bị loại khỏi
-// requiredCount nên không bị tính là "rớt" (xem checkDistance()).
+// Bao nhiêu sensor phải RA NGOÀI range (min/max) thì mới NGẮT FULL về MISSING.
+//
+// 2026-08-10: ngưỡng này KHÔNG còn đối xứng - nó chỉ điều khiển chiều RA. Máy trạng thái
+// chạy kiểu hysteresis (xem checkDistance()):
+//
+//   đang MISSING -> FULL : phải TẤT CẢ sensor (enable + online) đều trong range
+//   đang FULL -> MISSING : phải có >= missingThreshold sensor ngoài range
+//   ở giữa               : GIỮ NGUYÊN trạng thái đang có
+//
+// Vùng chết ở giữa là mục đích chính: mở cue thì đòi đủ hết, nhưng khi show đang chạy thì một
+// sensor nhiễu/lệch tạm không cắt ngang cue. missingThreshold = 1 cho ra đúng hành vi cũ
+// (không có vùng chết).
+//
+// Chỉ tính trên sensor đang enable VÀ đang online - sensor offline bị loại khỏi requiredCount
+// nên không bị tính là "ngoài range". Hệ quả cần biết: mất 1 sensor thì tiêu chuẩn vào FULL
+// tự hạ theo (chỉ cần các con còn sống đều trong range). Đây là lựa chọn có chủ đích - show
+// vẫn chạy được khi hỏng phần cứng - và dashboard hiện rõ "n/m sensor online" để không ai
+// tưởng vẫn đang đủ bộ.
+//
 // Cấu hình qua Web UI, hợp lệ 1..DEVICE_NUM.
 extern int missingThreshold;
 extern unsigned long confirmTime;

@@ -187,14 +187,18 @@ void handleRoot()
   // "Ngoai range" chu KHONG phai "rot": sensor OFFLINE bi loai han khoi phep dem, khong tinh
   // vao con so nay. Nhan cu ghi "rot" de nguoi van hanh hieu la gom ca rot mang - doc nhan ma
   // suy ra hanh vi thi ra sai.
-  html += "<label>Số sensor không nằm trong range mới tính là MISSING (1-";
+  //
+  // Nhan phai noi ro "NGAT FULL": tu 2026-08-10 con so nay CHI dieu khien chieu ra (xem
+  // hysteresis trong checkDistance()). Chieu vao FULL luon doi du HET, khong cau hinh duoc.
+  html += "<label>Số sensor ra khỏi range thì NGẮT FULL (1-";
   html += DEVICE_NUM;
   html += ")</label>";
   html += "<input name='miss_thresh' value='";
   html += missingThreshold;
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Chỉ đếm sensor đang Enable VÀ online (sensor OFFLINE bị loại hẳn, KHÔNG tính là ngoài range); nếu số sensor online ít hơn ngưỡng thì ngưỡng tự hạ xuống bằng số đó.</div>";
+  html += "<div class='note'><b>Vào FULL:</b> phải TẤT CẢ sensor đang Enable + online đều trong range - không cấu hình được. <b>Ngắt FULL:</b> khi số sensor ra khỏi range đạt con số trên. Ở giữa thì giữ nguyên trạng thái đang có, nên đặt 2 nghĩa là \"đủ hết mới lên FULL, nhưng 1 con lệch tạm thì chưa cắt cue\". Đặt 1 = không có vùng đệm, ra khỏi range 1 con là MISSING ngay.</div>";
+  html += "<div class='note'>Sensor OFFLINE bị loại hẳn khỏi phép đếm, KHÔNG tính là ngoài range - nên mất 1 sensor thì tiêu chuẩn vào FULL tự hạ theo (chỉ cần các con còn sống đều trong range). Nếu số sensor online ít hơn ngưỡng thì ngưỡng tự hạ xuống bằng số đó.</div>";
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Confirm Settings</h3>";

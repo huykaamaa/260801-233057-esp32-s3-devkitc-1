@@ -794,18 +794,34 @@ void checkDistance()
     }
   }
 
-  // FULL khi so sensor RỚT còn DƯỚI ngưỡng. missingThreshold = 1 cho ra đúng hành vi cũ
-  // (countOK == requiredCount).
-  //
+  int outOfRange = requiredCount - countOK;
+
   // Kẹp ngưỡng theo requiredCount: sensor offline bị loại khỏi requiredCount, nên nếu để
-  // nguyên ngưỡng 3 mà chỉ còn 2 sensor online thì số rớt tối đa là 2, không bao giờ chạm 3
-  // -> trạng thái kẹt ở FULL vĩnh viễn. Kẹp lại giữ đúng ý "phải mất HẾT mới là MISSING"
-  // thay vì biến nó thành "không bao giờ MISSING".
+  // nguyên ngưỡng 3 mà chỉ còn 2 sensor online thì số ngoài range tối đa là 2, không bao giờ
+  // chạm 3 -> kẹt ở FULL vĩnh viễn. Kẹp lại giữ đúng ý "phải mất HẾT mới là MISSING" thay vì
+  // biến nó thành "không bao giờ MISSING".
   int effectiveThreshold = missingThreshold;
   if (effectiveThreshold > requiredCount) {
     effectiveThreshold = requiredCount;
   }
-  bool currentState = (requiredCount > 0 && (requiredCount - countOK) < effectiveThreshold);
+
+  // HYSTERESIS (2026-08-10) - ngưỡng vào và ngưỡng ra KHÁC nhau, xem globals.h:
+  //   vào FULL : phải TẤT CẢ sensor enable+online trong range (outOfRange == 0)
+  //   ra MISSING: phải >= effectiveThreshold sensor ngoài range
+  //   ở giữa    : giữ nguyên trạng thái đang có
+  //
+  // Mốc so sánh là publishedState (cue ĐANG thực sự phát ra) chứ KHÔNG phải lastState:
+  // lastState còn dao động trong lúc chờ confirmTime, lấy nó làm mốc thì ngưỡng tự nhảy qua
+  // nhảy lại giữa "vào" và "ra" ngay trong một lần chuyển, cho ra kết quả tuỳ nhịp loop.
+  //
+  // requiredCount > 0 giữ ở CẢ HAI nhánh: mất hết sensor (offline sạch hoặc bỏ tick hết) thì
+  // về MISSING, thiết bị không tự nhận FULL khi đang mù hoàn toàn.
+  bool currentState;
+  if (!publishedState) {
+    currentState = (requiredCount > 0 && outOfRange == 0);
+  } else {
+    currentState = (requiredCount > 0 && outOfRange < effectiveThreshold);
+  }
 
   // MISSING dùng confirmTimeMissing riêng (mặc định = confirmTime * 2) - cấu hình được qua
   // Web UI, không cố định x2 cứng để tránh publish MISSING nhầm khi người tạm rời sensor.

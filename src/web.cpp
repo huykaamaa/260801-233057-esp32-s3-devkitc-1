@@ -135,7 +135,16 @@ void handleData() {
   // Cung mot chu "ngoai range" voi nhan o trang cau hinh: ca hai con so nay deu KHONG bao gom
   // sensor OFFLINE (bi loai khoi phep dem o vong lap tren, giong het checkDistance()).
   data += " &nbsp;|&nbsp; ngoài range <b>" + String(onlineCount - okCount) + "</b>";
-  data += ", MISSING khi ngoài range <b>" + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
+  // Hysteresis nen dieu kien ke tiep phu thuoc dang o phia nao (xem checkDistance()). Hien
+  // dung DIEU KIEN SAP TOI chu khong phai ca hai nguong: nguoi truc nhin vao day de biet "con
+  // thieu gi nua", in ca 2 chieu thi phai tu suy dang o chieu nao - dung luc dang xu ly su co.
+  // Moc la publishedState, y het cai checkDistance() dung, de 2 man hinh khong noi khac nhau.
+  if (publishedState) {
+    data += ", <b>ngắt FULL</b> khi ngoài range đạt <b>"
+          + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
+  } else {
+    data += ", <b>lên FULL</b> khi ngoài range về <b>0</b>";
+  }
   // Nguon RS485 phai hien o dashboard chu khong chi trong form: luc ca 3 sensor bao OFFLINE,
   // cau hoi dau tien la "dang nghe module nao" - khong thay o day thi phai mo tab Cau hinh
   // moi biet, dung luc dang chua chay show.
