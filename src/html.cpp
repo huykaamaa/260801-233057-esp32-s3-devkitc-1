@@ -184,14 +184,17 @@ void handleRoot()
   }
   html += "<div class='note'>Enable only the sensors that should be required for the FULL condition.</div>";
   html += "<div class='single'>";
-  html += "<label>Số sensor rớt mới tính là MISSING (1-";
+  // "Ngoai range" chu KHONG phai "rot": sensor OFFLINE bi loai han khoi phep dem, khong tinh
+  // vao con so nay. Nhan cu ghi "rot" de nguoi van hanh hieu la gom ca rot mang - doc nhan ma
+  // suy ra hanh vi thi ra sai.
+  html += "<label>Số sensor không nằm trong range mới tính là MISSING (1-";
   html += DEVICE_NUM;
   html += ")</label>";
   html += "<input name='miss_thresh' value='";
   html += missingThreshold;
   html += "'>";
   html += "</div>";
-  html += "<div class='note'>Chỉ đếm sensor đang Enable VÀ online (sensor OFFLINE bị loại, không tính là rớt); nếu số sensor online ít hơn ngưỡng thì ngưỡng tự hạ xuống bằng số đó.</div>";
+  html += "<div class='note'>Chỉ đếm sensor đang Enable VÀ online (sensor OFFLINE bị loại hẳn, KHÔNG tính là ngoài range); nếu số sensor online ít hơn ngưỡng thì ngưỡng tự hạ xuống bằng số đó.</div>";
   html += "</div>";
   html += "<div class='panel'>";
   html += "<h3>Confirm Settings</h3>";

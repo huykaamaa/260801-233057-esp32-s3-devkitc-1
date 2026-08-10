@@ -51,7 +51,11 @@ void handleData() {
   // mot chuoi realloc tang dan, bo lai block chet giua heap.
   data.reserve(1024);
 
-  data += "<span style='font-size:12px;color:#94a3b8'>Firmware build: " __DATE__ " " __TIME__ "</span><br>";
+  // BO dong "Firmware build: __DATE__ __TIME__" (2026-08-10). PlatformIO chi bien dich lai file
+  // nao thay doi, ma macro do nam trong web.cpp - lan build nao chi sua file khac thi web.cpp
+  // khong duoc dich lai va dau thoi gian DUNG YEN, trong khi firmware thi da doi. No noi doi
+  // dung luc duy nhat nguoi ta can no: kiem tra xem OTA da an chua. Dong "FW <md5>" o cuoi ham
+  // nay doc tu chinh anh dang chay nen khong bao gio sai - dung dong do.
   data += "<b>MQTT:</b> ";
   if (!mqttEnabled) {
     data += "<span style='color:gray'>DISABLED</span>";
@@ -128,8 +132,10 @@ void handleData() {
     if (isDistanceInRange(rsDistance[i], distanceMin[i], distanceMax[i])) okCount++;
   }
   data += "<br>Trong ngưỡng: <b>" + String(okCount) + "/" + String(onlineCount) + "</b> sensor online";
-  data += " &nbsp;|&nbsp; rớt <b>" + String(onlineCount - okCount) + "</b>";
-  data += ", MISSING khi rớt <b>" + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
+  // Cung mot chu "ngoai range" voi nhan o trang cau hinh: ca hai con so nay deu KHONG bao gom
+  // sensor OFFLINE (bi loai khoi phep dem o vong lap tren, giong het checkDistance()).
+  data += " &nbsp;|&nbsp; ngoài range <b>" + String(onlineCount - okCount) + "</b>";
+  data += ", MISSING khi ngoài range <b>" + String(missingThreshold > onlineCount ? onlineCount : missingThreshold) + "</b>";
   // Nguon RS485 phai hien o dashboard chu khong chi trong form: luc ca 3 sensor bao OFFLINE,
   // cau hoi dau tien la "dang nghe module nao" - khong thay o day thi phai mo tab Cau hinh
   // moi biet, dung luc dang chua chay show.
