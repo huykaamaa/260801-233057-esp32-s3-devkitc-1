@@ -101,17 +101,26 @@ bool relayPinEnabled[RELAY_PIN_COUNT] = {false, false, false, false};
 bool relayActiveHigh = true;
 unsigned long relayPulseMs = 3000;
 
-// Diagnostic WiFi AP - broadcasts the current ETH IP as its SSID for a few minutes after
-// boot so an operator can read the device's IP off a phone's WiFi list instead of needing
-// a USB cable + Serial monitor (see startDiagAp()). File-local only (static), nothing
-// outside this file needs it.
-static const unsigned long DIAG_AP_DURATION_MS = 5UL * 60UL * 1000UL; // 5 phut
+// Diagnostic WiFi AP - broadcasts the current ETH IP as its SSID so an operator can read the
+// device's IP off a phone's WiFi list instead of needing a USB cable + Serial monitor (see
+// startDiagAp()). File-local only (static), nothing outside this file needs it.
+//
+// 2026-08-21: KHONG con tu tat sau 5 phut, va gio phat CA khi khong co ETH. Ly do: nhin tu xa
+// (chi bang danh sach WiFi tren dien thoai) phai phan biet duoc ba trang thai - board chay va
+// co mang (thay "CANTIM-DHCP-<ip>"), board chay nhung mat mang (thay "CANTIM-NOETH"), va board
+// mat dien (khong thay gi ca). Ban cu chi phat khi eth_connected va chi trong 5 phut dau, nen
+// hai truong hop sau nhin y het nhau.
+//
 // Mat khau cho diag AP. Dung chung "12121212" voi cac phong khac trong cum de operator chi
 // phai nho mot cai. Luu y WPA2 yeu cau toi thieu 8 ky tu - ngan hon thi softAP() se fail va
 // mat luon duong vao nay.
 static const char *DIAG_AP_PASS = "12121212";
 static bool diagApActive = false;
-static unsigned long diagApStartMs = 0;
+// Ten dang phat. Giu lai de biet khi nao no khong con dung su that nua - xem diagApTick().
+static String diagApSsid;
+// Nhanh nao cua setup() da cap IP: true = static fallback F19. diagApTick() can no de dung
+// tien to cu khi phat lai ten, nen phai o pham vi file chu khong con la bien cuc bo trong setup().
+static bool ethFallbackUsed = false;
 
 void WiFiEvent(arduino_event_id_t event)
 {
@@ -214,27 +223,50 @@ static bool gatewayReachable(IPAddress gw)
   return gwPingGotReply;
 }
 
-// Called once right after eth_connected becomes true (DHCP success or static fallback -
-// both leave the real IP readable via ETH.localIP()). Protected with DIAG_AP_PASS: this AP
-// used to be open on the reasoning that it only needs to be READABLE in a WiFi scan list,
-// never connected to - but the WebServer listens on every netif, so anyone joining it landed
-// straight on the (unauthenticated) "/" config page at 192.168.4.1. If nobody is meant to
-// connect, a password costs nothing and closes that path. Auto-off
-// after DIAG_AP_DURATION_MS is handled in loop() so this doesn't keep the radio on (RF
-// noise + power) once the diagnostic window has passed. `isFallback` (caller knows which
-// branch of setup()'s ETH block succeeded) picks the SSID prefix so an operator can tell
-// at a glance whether the device is on the router's real DHCP address or stuck on the
-// fixed F19 fallback (192.168.99.199 by default) - same IP text alone doesn't say which.
-static void startDiagAp(bool isFallback)
+// Ten diag AP nen la gi NGAY LUC NAY. Ten nay la thu duy nhat doc duoc tu dien thoai khi
+// khong vao duoc Web UI, nen no phai noi dung su that: mat ETH ma van khoe mot dia chi IP la
+// mot loi noi doi rat dat - nguoi ta se di tim dia chi do tren mang thay vi di kiem tra soi day.
+// Vi vay khong co ETH thi dan thang "NOETH" chu khong dan "0.0.0.0".
+//
+// Tien to STATIC/DHCP cho biet board dang o dia chi that cua router hay dang ket o IP tinh du
+// phong F19 (mac dinh 192.168.99.199) - rieng chuoi IP khong noi len dieu do.
+static String diagApName()
 {
-  String ssid = (isFallback ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
+  if (!eth_connected) return String("CANTIM-NOETH");
+  return String(ethFallbackUsed ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
+}
+
+// Protected with DIAG_AP_PASS: this AP used to be open on the reasoning that it only needs to
+// be READABLE in a WiFi scan list, never connected to - but the WebServer listens on every
+// netif, so anyone joining it landed straight on the (unauthenticated) "/" config page at
+// 192.168.4.1. If nobody is meant to connect, a password costs nothing and closes that path.
+//
+// KHONG con tu tat sau 5 phut - xem khai bao diagApSsid.
+static void startDiagAp()
+{
+  String ssid = diagApName();
   if (WiFi.softAP(ssid.c_str(), DIAG_AP_PASS)) {
     diagApActive = true;
-    diagApStartMs = millis();
-    LOG("Diag AP: broadcasting '%s' for %lu min", ssid.c_str(), DIAG_AP_DURATION_MS / 60000UL);
+    diagApSsid = ssid;
+    LOG("Diag AP: broadcasting '%s'", ssid.c_str());
   } else {
     LOG("Diag AP: WiFi.softAP() failed");
   }
+}
+
+// Ten AP phai theo kip trang thai. Truoc day 5 phut la du ngan de ETH khong kip doi gi; gio no
+// phat mai nen mot cai ten sai se sai mai - va day dung la cai ten operator dua vao de ket
+// luan tu xa. Rut day mang ra thi ten phai doi thanh "CANTIM-NOETH", cam lai thi phai quay ve
+// dia chi that.
+//
+// Chi goi lai softAP() khi ten THUC SU khac: no da may dang noi vao AP ra, khong lam bua duoc.
+static void diagApTick()
+{
+  if (!diagApActive) return;
+  String want = diagApName();
+  if (want == diagApSsid) return;
+  LOG("Diag AP: trang thai doi '%s' -> '%s'", diagApSsid.c_str(), want.c_str());
+  startDiagAp();
 }
 
 // Xem globals.h. Goi 1 lan trong setup(); log ra Serial luon de doi chieu duoc voi dashboard
@@ -396,7 +428,7 @@ void setup()
     LOG("ETH Failed");
   }
 
-  bool ethFallbackUsed = false;
+  ethFallbackUsed = false;   // bien o pham vi file - xem khai bao gan dau file
 
   // "Ưu tiên IP tĩnh": apply the static IP right away and skip the DHCP wait entirely
   // (faster boot; useful when the network has no DHCP server, or a fixed IP is wanted for
@@ -464,9 +496,13 @@ void setup()
     }
   }
 
-  if (eth_connected) {
-    startDiagAp(ethFallbackUsed);
-  }
+  // Phat diag AP LUON, ke ca khi khong co ETH: ten no se la "CANTIM-NOETH", va do chinh la
+  // cach phan biet tu xa giua "board chay nhung mat mang" voi "board mat dien" (khong thay AP
+  // nao ca). Ban cu chi phat khi eth_connected nen hai truong hop do nhin y het nhau.
+  //
+  // Kem theo: khong co ETH thi AP nay la duong vao Web UI DUY NHAT (noi vao roi mo
+  // http://192.168.4.1) de con sua duoc IP tinh ma khong phai vac laptop + cap Serial toi noi.
+  startDiagAp();
 
   server.on("/", HTTP_GET, handleRoot);
   server.on("/data", HTTP_GET, handleData);
@@ -485,15 +521,12 @@ void setup()
 
 void loop()
 {
-  if (eth_connected) {
-    server.handleClient();
-  }
+  // KHONG con chan theo eth_connected: WebServer lang nghe tren MOI netif, ke ca softAP. Chan o
+  // day dong nghia voi "mat day mang thi mat luon Web UI qua 192.168.4.1" - dung cai duong vao
+  // ma diag AP sinh ra de cung cap. handleClient() khong co client thi tra ve ngay, khong ton gi.
+  server.handleClient();
 
-  if (diagApActive && (millis() - diagApStartMs) >= DIAG_AP_DURATION_MS) {
-    WiFi.softAPdisconnect(true);
-    diagApActive = false;
-    LOG("Diag AP: turned off after %lu min", DIAG_AP_DURATION_MS / 60000UL);
-  }
+  diagApTick();
 
   checkButtons();
   readRS485();
