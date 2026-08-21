@@ -604,6 +604,16 @@ void handleTestIot() {
 // Reset mem board. Gui response TRUOC roi moi restart (giong handleUpdateFinish) - neu goi
 // ESP.restart() ngay thi trinh duyet chi thay ket noi bi cat, khong biet lenh da nhan chua.
 // KHONG dung toi cac node ve tinh: chung co nguon rieng, muon reset node thi dung Test Relay.
+// Do vong dem log ra text tho. Co requireAuth: log chua ten SSID, dia chi IP/broker va dien
+// bien cau hinh - khong nen de bat ky ai trong tam song doc duoc.
+//
+// text/plain chu khong phai HTML: khoi phai escape, va trinh duyet hien nguyen van khong dien
+// giai gi - dung cai can khi doc log.
+void handleLog() {
+  if (!requireAuth()) return;
+  server.send(200, "text/plain; charset=utf-8", logDump());
+}
+
 void handleReboot() {
   if (!requireAuth()) {  // F6
     return;
