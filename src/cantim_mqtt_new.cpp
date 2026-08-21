@@ -331,12 +331,11 @@ static bool gatewayReachable(IPAddress gw)
 // phong F19 (mac dinh 192.168.99.199) - rieng chuoi IP khong noi len dieu do.
 static String diagApName()
 {
-  if (!eth_connected) return String("CANTIM-NOETH");
-  // OFFLINE khi co IP nhung KHONG co bang chung noi duoc voi ai (chua cam day, hoac gateway
-  // khong tra loi). Ten AP la thu duy nhat doc duoc tu dien thoai khi khong vao noi Web UI, nen
-  // mot cai ten noi doi la ton nhat: "STATIC-192.168.99.199" tren mot board khong cam day se
-  // lam nguoi ta di tim dia chi do tren mang thay vi di kiem tra soi day.
-  if (!ethVerified) return String("CANTIM-OFFLINE-") + ETH.localIP().toString();
+  // Chua co bang chung noi duoc voi mang thi KHONG dan dia chi vao ten - du netif co dang giu
+  // mot bo IP tinh. Dia chi do khong ai toi duoc, dan ra chi lam nguoi doc di tim no tren mang
+  // thay vi di kiem tra soi day. Gop luon hai truong hop "khong co IP" va "co IP nhung chet":
+  // dung tu goc nhin nguoi van hanh, ca hai deu la khong co mang.
+  if (!eth_connected || !ethVerified) return String("CANTIM-NOLINK");
   return String(ethFallbackUsed ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
 }
 
