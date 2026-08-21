@@ -64,6 +64,14 @@ void handleData() {
   if (eth_connected) {
     IPAddress d1 = ETH.dnsIP(0);
     IPAddress d2 = ETH.dnsIP(1);
+    // Co IP nhung khong co bang chung noi duoc voi ai: gan nhu chac chan la chua cam day mang.
+    // Noi thang thay vi de nguoi doc nhin so IP roi tuong mang dang chay binh thuong.
+    if (!ethNetVerified()) {
+      data += "<span style='color:red;font-weight:bold'>CHƯA VÀO ĐƯỢC MẠNG</span>";
+      data += "<br><span style='font-size:12px;color:#b45309'>Đã áp IP tĩnh " + ETH.localIP().toString() +
+              " nhưng gateway không trả lời — nhiều khả năng chưa cắm dây mạng, hoặc switch tắt. "
+              "Địa chỉ này hiện chưa dùng được.</span><br>";
+    }
     data += "<b>IP:</b> " + ETH.localIP().toString();
     data += " &nbsp;|&nbsp; <b>DNS:</b> ";
     if ((uint32_t)d1 == 0) {

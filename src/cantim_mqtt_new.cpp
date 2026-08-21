@@ -194,6 +194,24 @@ static String diagApSsid;
 // tien to cu khi phat lai ten, nen phai o pham vi file chu khong con la bien cuc bo trong setup().
 static bool ethFallbackUsed = false;
 
+// --- Noi dung SU THAT ve trang thai mang (port tu gia_sach 8cf4cbc, 2026-08-21) ------------
+// Board khong cam day mang van hien "CANTIM-STATIC-192.168.99.199" tren ten diag AP nhu the
+// moi thu binh thuong, trong khi dia chi do khong ai toi duoc. Mot cai ten noi doi la ton
+// nhat: nguoi ta se di tim IP do tren mang thay vi di kiem tra soi day.
+//
+// ethLinkPresent - co DAY dang cam va bat tay xong chua. PHAI theo doi bang su kien
+// ETH_CONNECTED / ETH_DISCONNECTED chu KHONG duoc dung ETH.linkUp(): ham do thuc chat la
+// NetworkInterface::linkUp(), than ham chi co "return esp_netif_is_netif_up()" - tuc no bao
+// netif da duoc dung len hay chua, hoan toan khong doc trang thai PHY. Ap mot bo IP tinh cung
+// lam netif up, nen hoi no "co day khong" thi cau tra loi luon la "co".
+//
+// ethVerified - co BANG CHUNG that su noi duoc voi mang chua: DHCP cap duoc IP (chung to co
+// server tra loi) hoac gateway tra loi ping. eth_connected chi co nghia "da co mot bo IP gan
+// vao netif" - dieu do van dung khi day mang nam tren ban.
+static volatile bool ethLinkPresent = false;
+static bool ethVerified = false;
+bool ethNetVerified() { return eth_connected && ethVerified; }
+
 void WiFiEvent(arduino_event_id_t event)
 {
   switch (event) {
@@ -202,20 +220,29 @@ void WiFiEvent(arduino_event_id_t event)
       ETH.setHostname("ESP32-W5500");
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
+      // Day su kien PHY that su bao "da co day va bat tay xong" - xem ethLinkPresent.
       LOG("ETH Connected");
+      ethLinkPresent = true;
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       LOG("ETH Got IP");
       LOG("IP: %s", ETH.localIP().toString().c_str());
       eth_connected = true;
+      // DHCP cap duoc IP = co server tra loi = co mang that. Day la bang chung manh nhat,
+      // khong can ping them.
+      ethVerified = true;
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
       LOG("ETH Disconnected");
       eth_connected = false;
+      ethLinkPresent = false;
+      ethVerified = false;
       break;
     case ARDUINO_EVENT_ETH_STOP:
       LOG("ETH Stopped");
       eth_connected = false;
+      ethLinkPresent = false;
+      ethVerified = false;
       break;
     default:
       break;
@@ -305,6 +332,11 @@ static bool gatewayReachable(IPAddress gw)
 static String diagApName()
 {
   if (!eth_connected) return String("CANTIM-NOETH");
+  // OFFLINE khi co IP nhung KHONG co bang chung noi duoc voi ai (chua cam day, hoac gateway
+  // khong tra loi). Ten AP la thu duy nhat doc duoc tu dien thoai khi khong vao noi Web UI, nen
+  // mot cai ten noi doi la ton nhat: "STATIC-192.168.99.199" tren mot board khong cam day se
+  // lam nguoi ta di tim dia chi do tren mang thay vi di kiem tra soi day.
+  if (!ethVerified) return String("CANTIM-OFFLINE-") + ETH.localIP().toString();
   return String(ethFallbackUsed ? "CANTIM-STATIC-" : "CANTIM-DHCP-") + ETH.localIP().toString();
 }
 
@@ -559,7 +591,18 @@ void setup()
       if (ETH.config(fallbackIp, fallbackGw, fallbackMask, fallbackGw, DNS_FALLBACK)) {
         eth_connected = true;
         ethFallbackUsed = true;
-        LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
+        // Ping o day nua chu khong chi o nhanh "uu tien IP tinh": khong hoi dap thi bo IP nay
+        // chi la mot dia chi trong dep de ma khong ai toi duoc. Van GIU IP (Web UI con vao
+        // duoc neu sau do co nguoi cam day) nhung KHONG bao la da vao mang - xem ethVerified.
+        //
+        // Bo qua ping khi khong co link: chac chan khong ai tra loi, doi them 4 giay vo ich
+        // giua luc boot.
+        ethVerified = ethLinkPresent && gatewayReachable(fallbackGw);
+        LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s) - %s",
+            ethStaticIp, ethStaticGateway, ethStaticNetmask,
+            ethVerified ? "gateway tra loi ping, mang OK"
+                        : (ethLinkPresent ? "gateway KHONG tra loi - CHUA VAO DUOC MANG"
+                                          : "CHUA CAM DAY MANG - dia chi nay chua dung duoc"));
       } else {
         LOG("ETH: static fallback ETH.config() call failed - device has no IP, Web UI unreachable");
       }

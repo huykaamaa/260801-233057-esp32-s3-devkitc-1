@@ -198,6 +198,10 @@ extern unsigned long confirmTimeMissing;   // Thời gian xác nhận riêng cho
 // bị rớt mạng (MQTT QoS0 và OSC/UDP đều không đảm bảo gửi tới nơi). 0 = tắt.
 extern unsigned long heartbeatInterval;
 extern bool eth_connected;
+// Co BANG CHUNG that su noi duoc voi mang chua (DHCP cap IP, hoac gateway tra loi ping).
+// eth_connected chi co nghia "da co mot bo IP gan vao netif" - dieu do van dung khi day mang
+// nam tren ban. Xem giai thich day du trong cantim_mqtt_new.cpp.
+bool ethNetVerified();
 
 // --- Ethernet static-IP fallback (F19) ---------------------------------------------------
 // If no DHCP server is reachable, lwIP's DHCP client retries forever and this build has no
