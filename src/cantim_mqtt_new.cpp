@@ -96,6 +96,16 @@ char ethStaticGateway[16] = "192.168.99.1";
 char ethStaticNetmask[16] = "255.255.255.0";
 bool ethUseStaticFirst = false;
 
+// DNS DU PHONG khi chay IP TINH (2026-08-21). Nhanh IP tinh von chi dien dns1 = gateway va bo
+// trong dns2 - do la mot GIA DINH: rang gateway ay co chay dich vu DNS va chiu tra loi cho
+// thiet bi nay. Gia dinh do da vo o mot mang that ben phong Gia Sach: board hoi gateway roi im,
+// trong khi laptop cung dat IP tinh tren dung mang do, hoi dung gateway do, lai tra ve binh
+// thuong. Dien mot DNS cong cong vao o dns2 dang bo trong thi lwIP tu hoi sang no khi cai dau
+// khong tra loi.
+//
+// Chi la duong LUI - dns1 van la gateway, mang binh thuong khong doi hanh vi gi.
+static const IPAddress DNS_FALLBACK(8, 8, 8, 8);
+
 const uint8_t relayPins[RELAY_PIN_COUNT] = {4, 5, 6, 7};
 bool relayPinEnabled[RELAY_PIN_COUNT] = {false, false, false, false};
 bool relayActiveHigh = true;
@@ -438,7 +448,7 @@ void setup()
     IPAddress ip, gw, mask;
     if (ip.fromString(ethStaticIp) && gw.fromString(ethStaticGateway) && mask.fromString(ethStaticNetmask)) {
       // Gateway as DNS1, same reasoning as the static fallback branch below (F34).
-      if (ETH.config(ip, gw, mask, gw)) {
+      if (ETH.config(ip, gw, mask, gw, DNS_FALLBACK)) {
         if (gatewayReachable(gw)) {
           eth_connected = true;
           ethFallbackUsed = true;
@@ -484,7 +494,7 @@ void setup()
       // "mqtt://%s:%u" so a hostname is a valid input, but on this static-fallback branch
       // a hostname would never resolve without a DNS server - pass the gateway as DNS1
       // (same assumption the rest of this fallback already makes: the gateway is reachable).
-      if (ETH.config(fallbackIp, fallbackGw, fallbackMask, fallbackGw)) {
+      if (ETH.config(fallbackIp, fallbackGw, fallbackMask, fallbackGw, DNS_FALLBACK)) {
         eth_connected = true;
         ethFallbackUsed = true;
         LOG("ETH: static fallback applied - IP %s (gateway %s, netmask %s)", ethStaticIp, ethStaticGateway, ethStaticNetmask);
@@ -493,6 +503,16 @@ void setup()
       }
     } else {
       LOG("ETH: static fallback IP/gateway/netmask string failed to parse - check eth_ip/eth_gw/eth_mask in NVS");
+    }
+  }
+
+  // In DNS dang thuc su dung. Truoc day khong in o dau ca, nen khi "nap tu link bang ten mien"
+  // im lang that bai thi khong co cach nao biet board dang hoi ai.
+  if (eth_connected) {
+    LOG("DNS: %s / %s", ETH.dnsIP(0).toString().c_str(), ETH.dnsIP(1).toString().c_str());
+    if ((uint32_t)ETH.dnsIP(0) == 0) {
+      LOG("DNS: bang DNS RONG - hostByName() se that bai NGAY, khong gui goi nao. "
+          "URL dung ten mien se im lang khong chay; dung IP thi van duoc.");
     }
   }
 

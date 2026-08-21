@@ -3,6 +3,7 @@
 #include "web.h"
 #include "html.h"
 #include "relay.h"
+#include <ETH.h>   // ETH.dnsIP() cho dong DNS tren dashboard
 #include "sensor_logic.h" // isDistanceInRange() - dung o handleData de dem sensor trong nguong
 #include <Arduino.h>
 #include <Update.h>
@@ -56,6 +57,24 @@ void handleData() {
   // khong duoc dich lai va dau thoi gian DUNG YEN, trong khi firmware thi da doi. No noi doi
   // dung luc duy nhat nguoi ta can no: kiem tra xem OTA da an chua. Dong "FW <md5>" o cuoi ham
   // nay doc tu chinh anh dang chay nen khong bao gio sai - dung dong do.
+  // DNS server board DANG THUC SU dung. Truoc day khong hien o dau ca - khong Serial, khong Web
+  // UI - nen khi "nap tu link bang ten mien" im lang that bai thi khong co cach nao biet board
+  // dang hoi ai. 0.0.0.0 la dau hieu quyet dinh: bang DNS rong thi hostByName() tra loi NGAY,
+  // khong gui goi nao ra - dung kieu "server khong thay request nao".
+  if (eth_connected) {
+    IPAddress d1 = ETH.dnsIP(0);
+    IPAddress d2 = ETH.dnsIP(1);
+    data += "<b>IP:</b> " + ETH.localIP().toString();
+    data += " &nbsp;|&nbsp; <b>DNS:</b> ";
+    if ((uint32_t)d1 == 0) {
+      data += "<span style='color:red;font-weight:bold'>TRỐNG</span> — không phân giải được tên miền";
+    } else {
+      data += d1.toString();
+      if ((uint32_t)d2 != 0) data += " &middot; " + d2.toString();
+    }
+    data += "<br>";
+  }
+
   data += "<b>MQTT:</b> ";
   if (!mqttEnabled) {
     data += "<span style='color:gray'>DISABLED</span>";
